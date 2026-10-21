@@ -48,6 +48,8 @@ class PlayerActivity : ComponentActivity() {
         private const val EXTRA_CID = "cid"
         private const val AVC = 7
         private const val BOOST_SPEED = 2f
+        /** 兩次 OK 間隔比這短就視為長按的自動重複（人手連按不會這麼快） */
+        private const val AUTO_REPEAT_GAP_MS = 200L
         private const val MAX_URL_ATTEMPTS = 3
 
         fun start(context: Context, bvid: String, cid: Long = 0L) {
@@ -78,6 +80,8 @@ class PlayerActivity : ComponentActivity() {
     private var lastBack = 0L
     private var okDown = false
     private var boosting = false
+    private var lastOkUp = 0L
+    private var boostRelease: Job? = null
 
     private val dataSourceFactory by lazy {
         DefaultHttpDataSource.Factory()
@@ -160,6 +164,7 @@ class PlayerActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        boostRelease?.cancel()
         if (boosting) stopBoost()
         okDown = false
         reportProgress()
@@ -469,12 +474,32 @@ class PlayerActivity : ComponentActivity() {
             }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER,
             KeyEvent.KEYCODE_SPACE -> {
-                // 短按：暫停／播放（放開時才判斷）；長按：放開前以 2 倍速播放
+                // 短按：暫停／播放（放開時才判斷）；長按：放開前以 2 倍速播放。
+                // 長按有兩種送法：一般遙控器送 repeatCount > 0 的 DOWN；
+                // 模擬器鍵盤和部分紅外線遙控器則連續送很密的「按下＋放開」。
+                val now = SystemClock.uptimeMillis()
                 if (down) {
-                    if (event.repeatCount == 0) okDown = true
-                    else if (okDown && !boosting && ui.error == null) startBoost()
+                    if (event.repeatCount == 0) {
+                        okDown = true
+                        if (now - lastOkUp < AUTO_REPEAT_GAP_MS) {
+                            boostRelease?.cancel()
+                            if (!boosting && ui.error == null) startBoost()
+                        }
+                    } else if (okDown && !boosting && ui.error == null) {
+                        startBoost()
+                    }
                 } else {
-                    if (boosting) stopBoost() else if (okDown) togglePlay()
+                    lastOkUp = now
+                    if (boosting) {
+                        // 等一下確認是真的放開，而不是下一次自動重複
+                        boostRelease?.cancel()
+                        boostRelease = lifecycleScope.launch {
+                            delay(AUTO_REPEAT_GAP_MS)
+                            stopBoost()
+                        }
+                    } else if (okDown) {
+                        togglePlay()
+                    }
                     okDown = false
                 }
                 return true
