@@ -3,6 +3,9 @@ name: Build & Release APK
 on:
   push:
     branches: [main]
+    # 只改說明文件不用發新版（不然 App 會跳出沒有內容的更新）
+    paths-ignore:
+      - "**.md"
   workflow_dispatch:
 
 permissions:
@@ -47,8 +50,12 @@ jobs:
           name: BiliTV v1.0.${{ github.run_number }}
           make_latest: true
           files: BiliTV.apk
+          # App 內更新視窗會顯示 `---` 以上的內容（commit 訊息）
           body: |
-            Android TV 用的嗶哩嗶哩用戶端。
+            ${{ github.event.head_commit.message }}
 
+            ---
             固定下載網址（永遠是最新版）：
             https://github.com/${{ github.repository }}/releases/latest/download/BiliTV.apk
+
+            Downloader 下載碼：5925092

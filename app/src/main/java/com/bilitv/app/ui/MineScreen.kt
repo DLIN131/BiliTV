@@ -22,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,8 +39,10 @@ import com.bilitv.app.Session
 import com.bilitv.app.net.BiliApi
 import com.bilitv.app.util.Fmt
 import com.bilitv.app.util.QrCode
+import com.bilitv.app.util.Updater
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun MineScreen() {
@@ -88,6 +91,11 @@ fun MineScreen() {
                 fontSize = 14.sp,
                 color = Gray,
             )
+
+            Spacer(Modifier.height(40.dp))
+            Text("關於", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(16.dp))
+            UpdatePanel()
         }
     }
 }
@@ -115,6 +123,33 @@ private fun SettingsPanel() {
             danmaku = !danmaku
             Prefs.danmaku = danmaku
         }) { Text("預設顯示彈幕：${if (danmaku) "開" else "關"}") }
+    }
+}
+
+@Composable
+private fun UpdatePanel() {
+    val scope = rememberCoroutineScope()
+    var checking by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<String?>(null) }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("目前版本 ${Updater.currentVersionName}", fontSize = 16.sp)
+        Spacer(Modifier.width(24.dp))
+        BiliButton(onClick = {
+            if (checking) return@BiliButton
+            checking = true
+            result = null
+            scope.launch {
+                runCatching { Updater.check() }
+                    .onSuccess { if (it != null) Updater.pending = it else result = "已經是最新版本" }
+                    .onFailure { result = "檢查失敗：${it.message}" }
+                checking = false
+            }
+        }) { Text(if (checking) "檢查中…" else "檢查更新") }
+        result?.let {
+            Spacer(Modifier.width(16.dp))
+            Text(it, fontSize = 15.sp, color = Gray)
+        }
     }
 }
 

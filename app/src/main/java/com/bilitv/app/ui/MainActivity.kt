@@ -49,7 +49,9 @@ import androidx.tv.material3.ModalNavigationDrawer
 import androidx.tv.material3.NavigationDrawerItem
 import androidx.tv.material3.Text
 import androidx.tv.material3.rememberDrawerState
+import com.bilitv.app.BuildConfig
 import com.bilitv.app.Session
+import com.bilitv.app.util.Updater
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
@@ -101,6 +103,16 @@ fun AppRoot() {
         }
     }
     BackHandler(enabled = stack.isNotEmpty()) { stack.removeAt(stack.lastIndex) }
+
+    // 開啟時檢查 GitHub 有沒有新版（debug 版的 versionCode 固定是 1，不自動檢查）
+    LaunchedEffect(Unit) {
+        if (!BuildConfig.DEBUG) {
+            runCatching { Updater.check() }.getOrNull()?.let { Updater.pending = it }
+        }
+    }
+    Updater.pending?.let { release ->
+        UpdateDialog(release, onDismiss = { Updater.pending = null })
+    }
 }
 
 @Composable
