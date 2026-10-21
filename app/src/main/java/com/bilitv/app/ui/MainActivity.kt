@@ -1,6 +1,7 @@
 package com.bilitv.app.ui
 
 import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -14,16 +15,21 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -51,17 +57,28 @@ import androidx.tv.material3.Text
 import androidx.tv.material3.rememberDrawerState
 import com.bilitv.app.BuildConfig
 import com.bilitv.app.Session
+import com.bilitv.app.player.LivePlayerActivity
 import com.bilitv.app.util.Updater
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
+    /** 外部連結（影片／UP 主／直播），處理完清掉 */
+    private var pendingLink by mutableStateOf<DeepLink?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) pendingLink = parseDeepLink(intent?.data)
         setContent {
             BiliTheme {
-                AppRoot()
+                AppRoot(link = pendingLink, onLinkHandled = { pendingLink = null })
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingLink = parseDeepLink(intent.data)
     }
 }
 
@@ -69,6 +86,7 @@ enum class Tab(val label: String, val icon: ImageVector) {
     Recommend("推薦", Icons.Filled.Home),
     Popular("熱門", Icons.Filled.Star),
     Ranking("排行榜", Icons.AutoMirrored.Filled.List),
+    Live("直播", Icons.Filled.PlayArrow),
     Dynamic("動態", Icons.Filled.Notifications),
     History("歷史紀錄", Icons.Filled.DateRange),
     Search("搜尋", Icons.Filled.Search),
@@ -76,29 +94,53 @@ enum class Tab(val label: String, val icon: ImageVector) {
 }
 
 @Composable
-fun AppRoot() {
+fun AppRoot(link: DeepLink? = null, onLinkHandled: () -> Unit = {}) {
     var tab by rememberSaveable { mutableStateOf(Tab.Recommend) }
     var firstLaunch by remember { mutableStateOf(true) }
-    // 詳情頁堆疊（bvid），從相關推薦可以一直往下點
-    val stack = remember { mutableStateListOf<String>() }
-    val openVideo: (String) -> Unit = { stack.add(it) }
+    // 頁面堆疊：影片詳情、UP 主頁，可以一直往下點
+    val stack = remember { mutableStateListOf<Route>() }
+    val context = LocalContext.current
+    val nav = remember {
+        Nav(
+            openVideo = { stack.add(Route.Video(it)) },
+            openUp = { if (it > 0) stack.add(Route.Up(it)) },
+            openLive = { roomId, title, anchor -> LivePlayerActivity.start(context, roomId, title, anchor) },
+        )
+    }
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Bg)
-    ) {
-        if (stack.isEmpty()) {
-            HomeScreen(
-                tab = tab,
-                onTab = { tab = it },
-                openVideo = openVideo,
-                focusDrawer = firstLaunch,
-                onFocused = { firstLaunch = false },
-            )
-        } else {
-            key(stack.size, stack.last()) {
-                DetailScreen(bvid = stack.last(), openVideo = openVideo)
+    LaunchedEffect(link) {
+        when (link) {
+            is DeepLink.Open -> {
+                firstLaunch = false
+                stack.add(link.route)
+            }
+            is DeepLink.Live -> nav.openLive(link.roomId, "", "")
+            null -> return@LaunchedEffect
+        }
+        onLinkHandled()
+    }
+
+    CompositionLocalProvider(LocalNav provides nav) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Bg)
+        ) {
+            val top = stack.lastOrNull()
+            if (top == null) {
+                HomeScreen(
+                    tab = tab,
+                    onTab = { tab = it },
+                    focusDrawer = firstLaunch,
+                    onFocused = { firstLaunch = false },
+                )
+            } else {
+                key(stack.size, top) {
+                    when (top) {
+                        is Route.Video -> DetailScreen(bvid = top.bvid)
+                        is Route.Up -> UpScreen(mid = top.mid)
+                    }
+                }
             }
         }
     }
@@ -119,7 +161,6 @@ fun AppRoot() {
 fun HomeScreen(
     tab: Tab,
     onTab: (Tab) -> Unit,
-    openVideo: (String) -> Unit,
     focusDrawer: Boolean,
     onFocused: () -> Unit,
 ) {
@@ -149,6 +190,7 @@ fun HomeScreen(
                 Modifier
                     .fillMaxHeight()
                     .background(if (value == DrawerValue.Open) Color(0xFF17171C) else Color.Transparent)
+                    .verticalScroll(rememberScrollState())
                     .padding(12.dp)
                     .onFocusChanged { drawerFocused = it.hasFocus }
                     .selectableGroup(),
@@ -182,16 +224,17 @@ fun HomeScreen(
         ) {
             val goLogin = { onTab(Tab.Mine) }
             when (tab) {
-                Tab.Recommend -> FeedTab("推薦", "recommend", ::RecommendSource, openVideo)
-                Tab.Popular -> FeedTab("熱門", "popular", ::PopularSource, openVideo)
-                Tab.Ranking -> FeedTab("排行榜", "ranking", ::RankingSource, openVideo)
+                Tab.Recommend -> FeedTab("推薦", "recommend", ::RecommendSource)
+                Tab.Popular -> FeedTab("熱門", "popular", ::PopularSource)
+                Tab.Ranking -> FeedTab("排行榜", "ranking", ::RankingSource)
+                Tab.Live -> LiveScreen(goLogin)
                 Tab.Dynamic ->
-                    if (Session.isLogin) FeedTab("關注動態", "dynamic", ::DynamicSource, openVideo)
+                    if (Session.isLogin) FeedTab("關注動態", "dynamic", ::DynamicSource)
                     else LoginPrompt(goLogin)
                 Tab.History ->
-                    if (Session.isLogin) FeedTab("歷史紀錄", "history", ::HistorySource, openVideo)
+                    if (Session.isLogin) FeedTab("歷史紀錄", "history", ::HistorySource)
                     else LoginPrompt(goLogin)
-                Tab.Search -> SearchScreen(openVideo)
+                Tab.Search -> SearchScreen()
                 Tab.Mine -> MineScreen()
             }
         }
@@ -199,12 +242,37 @@ fun HomeScreen(
 }
 
 @Composable
-fun FeedTab(title: String, key: String, factory: () -> FeedSource, openVideo: (String) -> Unit) {
+fun FeedTab(title: String, key: String, factory: () -> FeedSource) {
+    val nav = LocalNav.current
     val vm: FeedViewModel = viewModel(key = "$key#${Session.generation}") { FeedViewModel(factory) }
     Column(Modifier.fillMaxSize()) {
         ScreenTitle(title) {
             BiliButton(onClick = { vm.refresh() }) { Text("重新整理") }
         }
-        VideoGrid(vm, onClick = { openVideo(it.bvid) })
+        VideoGrid(vm, onClick = nav::open)
+    }
+}
+
+/** 直播：推薦直播／我關注的（登入後） */
+@Composable
+fun LiveScreen(goLogin: () -> Unit) {
+    val nav = LocalNav.current
+    var following by rememberSaveable { mutableStateOf(false) }
+    val showFollowing = following && Session.isLogin
+    val vm: FeedViewModel = viewModel(key = "live-$showFollowing#${Session.generation}") {
+        FeedViewModel(if (showFollowing) ::LiveFollowingSource else ::LiveRecommendSource)
+    }
+    Column(Modifier.fillMaxSize()) {
+        ScreenTitle("直播") {
+            BiliButton(onClick = { following = false }, selected = !showFollowing) { Text("推薦直播") }
+            Spacer(Modifier.width(12.dp))
+            BiliButton(
+                onClick = { if (Session.isLogin) following = true else goLogin() },
+                selected = showFollowing,
+            ) { Text("我關注的") }
+            Spacer(Modifier.width(12.dp))
+            BiliButton(onClick = { vm.refresh() }) { Text("重新整理") }
+        }
+        VideoGrid(vm, onClick = nav::open)
     }
 }

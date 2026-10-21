@@ -31,16 +31,19 @@ object Http {
             .readTimeout(20, TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 val req = chain.request()
-                val b = req.newBuilder().header("User-Agent", UA)
+                val b = req.newBuilder()
+                if (req.header("User-Agent") == null) b.header("User-Agent", UA)
                 if (req.header("Referer") == null) b.header("Referer", REFERER)
                 chain.proceed(b.build())
             }
             .build()
     }
 
-    suspend fun getJson(url: HttpUrl): JSONObject = withContext(Dispatchers.IO) {
-        parse(client.newCall(Request.Builder().url(url).build()).execute())
-    }
+    suspend fun getJson(url: HttpUrl, headers: Map<String, String> = emptyMap()): JSONObject =
+        withContext(Dispatchers.IO) {
+            val req = Request.Builder().url(url).apply { headers.forEach { (k, v) -> header(k, v) } }.build()
+            parse(client.newCall(req).execute())
+        }
 
     suspend fun postForm(url: String, form: Map<String, Any?>): JSONObject = withContext(Dispatchers.IO) {
         val body = FormBody.Builder().apply {

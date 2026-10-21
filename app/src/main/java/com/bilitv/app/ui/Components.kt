@@ -104,7 +104,11 @@ fun VideoCard(item: VideoItem, onClick: () -> Unit, modifier: Modifier = Modifie
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (item.views.isNotEmpty()) {
-                    Text("▶ ${item.views}", fontSize = 11.sp, color = Color.White)
+                    Text(
+                        if (item.liveRoomId > 0) "人氣 ${item.views}" else "▶ ${item.views}",
+                        fontSize = 11.sp,
+                        color = Color.White,
+                    )
                     Spacer(Modifier.width(10.dp))
                 }
                 if (item.danmaku.isNotEmpty()) {
@@ -112,6 +116,18 @@ fun VideoCard(item: VideoItem, onClick: () -> Unit, modifier: Modifier = Modifie
                 }
                 Spacer(Modifier.weight(1f))
                 if (item.duration.isNotEmpty()) Text(item.duration, fontSize = 11.sp, color = Color.White)
+            }
+            if (item.liveRoomId > 0) {
+                Text(
+                    "● 直播",
+                    fontSize = 11.sp,
+                    color = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .background(Pink, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
             }
             if (item.progress >= 0f) {
                 Box(

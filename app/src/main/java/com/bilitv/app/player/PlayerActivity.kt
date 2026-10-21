@@ -65,6 +65,7 @@ class PlayerActivity : ComponentActivity() {
     private lateinit var player: ExoPlayer
     private lateinit var danmakuView: DanmakuView
 
+    private var currentBvid = ""
     private var detail: VideoDetail? = null
     private var info: PlayInfo? = null
     private var currentCid = 0L
@@ -153,13 +154,18 @@ class PlayerActivity : ComponentActivity() {
                         ui.menuOpen = false
                         playPage(i, 0L)
                     },
+                    onEpisode = { i ->
+                        ui.menuOpen = false
+                        ui.episodes.getOrNull(i)?.let { if (it.bvid != currentBvid) loadVideo(it.bvid) }
+                    },
                 )
             }
         }
 
         onBackPressedDispatcher.addCallback(this) { onBack() }
         startTicker()
-        load()
+        val bvid = intent.getStringExtra(EXTRA_BVID) ?: run { finish(); return }
+        loadVideo(bvid, intent.getLongExtra(EXTRA_CID, 0L))
     }
 
     override fun onPause() {
@@ -178,12 +184,20 @@ class PlayerActivity : ComponentActivity() {
 
     // ---------- 載入 ----------
 
-    private fun load() {
-        val bvid = intent.getStringExtra(EXTRA_BVID) ?: run { finish(); return }
-        val wantCid = intent.getLongExtra(EXTRA_CID, 0L)
+    /** 載入一部影片（第一次開啟，或在合集裡換集） */
+    private fun loadVideo(bvid: String, wantCid: Long = 0L, hint: String? = null) {
+        if (currentCid != 0L) reportProgress()
+        currentBvid = bvid
+        detail = null
+        info = null
+        currentCid = 0L
+        loadJob?.cancel()
+        danmakuJob?.cancel()
+        danmakuView.setData(emptyList())
+        player.stop()
         ui.loading = true
         ui.error = null
-        loadJob?.cancel()
+        ui.controlsVisible = true
         loadJob = lifecycleScope.launch {
             try {
                 val d = BiliApi.view(bvid)
@@ -191,6 +205,10 @@ class PlayerActivity : ComponentActivity() {
                 detail = d
                 ui.title = d.title
                 ui.pages = d.pages
+                val episodes = d.season?.episodes.orEmpty()
+                ui.episodes = episodes
+                ui.seasonTitle = d.season?.title.orEmpty()
+                ui.episodeIndex = episodes.indexOfFirst { it.bvid == d.bvid }
 
                 var index = d.pages.indexOfFirst { it.cid == wantCid }.coerceAtLeast(0)
                 var start = 0L
@@ -205,7 +223,7 @@ class PlayerActivity : ComponentActivity() {
                         if (page.cid == lastCid && ms > 5_000 && ms < page.duration * 1000L - 10_000) start = ms
                     }
                 }
-                playPage(index, start, if (start > 0) "已從 ${Fmt.ms(start)} 繼續播放" else null)
+                playPage(index, start, if (start > 0) "已從 ${Fmt.ms(start)} 繼續播放" else hint)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -227,7 +245,11 @@ class PlayerActivity : ComponentActivity() {
         avcFallback = false
         urlAttempt = 0
         ui.pageIndex = index
-        ui.subtitle = if (d.pages.size > 1) "P${page.page}  ${page.title}" else d.ownerName
+        ui.subtitle = listOfNotNull(
+            d.ownerName,
+            if (ui.episodeIndex >= 0) "合集 ${ui.seasonTitle} 第 ${ui.episodeIndex + 1}/${ui.episodes.size} 集" else null,
+            if (d.pages.size > 1) "P${page.page} ${page.title}" else null,
+        ).filter { it.isNotBlank() }.joinToString("  ·  ")
         ui.loading = true
         ui.error = null
         ui.controlsVisible = true
@@ -304,7 +326,7 @@ class PlayerActivity : ComponentActivity() {
     }
 
     private fun retry() {
-        if (detail == null) load()
+        if (detail == null) loadVideo(currentBvid)
         else if (info == null || currentCid != detail?.pages?.getOrNull(ui.pageIndex)?.cid) playPage(ui.pageIndex, 0L)
         else {
             urlAttempt++
@@ -313,13 +335,31 @@ class PlayerActivity : ComponentActivity() {
     }
 
     private fun onEnded() {
-        val d = detail ?: return
-        if (ui.pageIndex < d.pages.size - 1) {
-            playPage(ui.pageIndex + 1, 0L, "自動播放下一集")
-        } else {
+        if (!next(auto = true)) {
             reportProgress()
             finish()
         }
+    }
+
+    /** 下一個：同影片的下一 P，沒有就換合集的下一集。沒有下一個回傳 false */
+    private fun next(auto: Boolean = false): Boolean {
+        val d = detail ?: return false
+        if (ui.pageIndex < d.pages.size - 1) {
+            playPage(ui.pageIndex + 1, 0L, if (auto) "自動播放下一 P" else null)
+            return true
+        }
+        val ep = ui.episodes.getOrNull(ui.episodeIndex + 1).takeIf { ui.episodeIndex >= 0 } ?: return false
+        loadVideo(ep.bvid, hint = "${if (auto) "自動播放下一集" else "下一集"}：${ep.title}")
+        return true
+    }
+
+    private fun previous() {
+        if (ui.pageIndex > 0) {
+            playPage(ui.pageIndex - 1, 0L)
+            return
+        }
+        val ep = ui.episodes.getOrNull(ui.episodeIndex - 1) ?: return
+        loadVideo(ep.bvid, hint = "上一集：${ep.title}")
     }
 
     private fun reportProgress() {
@@ -531,11 +571,11 @@ class PlayerActivity : ComponentActivity() {
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_NEXT, KeyEvent.KEYCODE_CHANNEL_DOWN -> {
-                if (first) detail?.let { if (ui.pageIndex < it.pages.size - 1) playPage(ui.pageIndex + 1, 0L) }
+                if (first && !next()) showHint("已經是最後一集")
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_PREVIOUS, KeyEvent.KEYCODE_CHANNEL_UP -> {
-                if (first && ui.pageIndex > 0) playPage(ui.pageIndex - 1, 0L)
+                if (first) previous()
                 return true
             }
         }

@@ -77,6 +77,34 @@ class SearchSource(val keyword: String) : FeedSource() {
     }
 }
 
+class UpVideosSource(private val mid: Long) : FeedSource() {
+    private var lastAid = 0L
+    override suspend fun next(): List<VideoItem> {
+        val r = BiliApi.upVideos(mid, lastAid)
+        r.items.lastOrNull()?.let { lastAid = it.aid }
+        hasMore = r.hasNext && lastAid > 0
+        return r.items
+    }
+}
+
+class LiveRecommendSource : FeedSource() {
+    private var page = 0
+    override suspend fun next(): List<VideoItem> {
+        val list = BiliApi.liveRecommend(++page)
+        hasMore = list.isNotEmpty() && page < 10
+        return list
+    }
+}
+
+class LiveFollowingSource : FeedSource() {
+    private var page = 0
+    override suspend fun next(): List<VideoItem> {
+        val r = BiliApi.liveFollowing(++page)
+        hasMore = r.hasMore
+        return r.items
+    }
+}
+
 class FeedViewModel(private var factory: () -> FeedSource) : ViewModel() {
     var source: FeedSource = factory()
         private set

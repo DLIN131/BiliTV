@@ -55,6 +55,7 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
+import com.bilitv.app.net.Episode
 import com.bilitv.app.net.Page
 import com.bilitv.app.ui.BiliButton
 import com.bilitv.app.ui.Gray
@@ -84,6 +85,10 @@ class PlayerUi {
     var pageIndex by mutableIntStateOf(0)
     /** 長按 OK 暫時 2 倍速 */
     var boosting by mutableStateOf(false)
+    /** 合集（沒有合集時為空） */
+    var episodes by mutableStateOf<List<Episode>>(emptyList())
+    var episodeIndex by mutableIntStateOf(-1)
+    var seasonTitle by mutableStateOf("")
 }
 
 val SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
@@ -100,6 +105,7 @@ fun PlayerScreen(
     onSpeed: (Float) -> Unit,
     onDanmaku: (Boolean) -> Unit,
     onPage: (Int) -> Unit,
+    onEpisode: (Int) -> Unit,
 ) {
     Box(
         Modifier
@@ -186,7 +192,7 @@ fun PlayerScreen(
         }
 
         if (ui.menuOpen) {
-            PlayerMenu(ui, onQuality, onSpeed, onDanmaku, onPage)
+            PlayerMenu(ui, onQuality, onSpeed, onDanmaku, onPage, onEpisode)
         }
     }
 }
@@ -259,6 +265,7 @@ private fun PlayerMenu(
     onSpeed: (Float) -> Unit,
     onDanmaku: (Boolean) -> Unit,
     onPage: (Int) -> Unit,
+    onEpisode: (Int) -> Unit,
 ) {
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) {
@@ -327,6 +334,27 @@ private fun PlayerMenu(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text("P${p.page}  ${p.title}", fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+                if (ui.episodes.size > 1) {
+                    item {
+                        Text(
+                            "合集・${ui.seasonTitle}（${ui.episodes.size}）",
+                            fontSize = 15.sp,
+                            color = Gray,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                    itemsIndexed(ui.episodes, key = { _, ep -> "ep-${ep.bvid}" }) { i, ep ->
+                        BiliButton(
+                            onClick = { onEpisode(i) },
+                            selected = i == ui.episodeIndex,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("${i + 1}.  ${ep.title}", fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }

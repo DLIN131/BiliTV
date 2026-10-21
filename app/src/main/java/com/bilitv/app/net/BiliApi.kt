@@ -10,11 +10,19 @@ import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
+import java.net.URLEncoder
+import java.util.TreeMap
 import java.util.zip.Inflater
 
 object BiliApi {
     private const val API = "https://api.bilibili.com"
     private const val PASSPORT = "https://passport.bilibili.com"
+    private const val LIVE = "https://api.live.bilibili.com"
+    private const val APP_KEY = "1d8b6e7d45233436"
+    private const val APP_SEC = "560c52ccd288fed045859ed18bffd973"
+    private const val APP_UA = "Mozilla/5.0 BiliDroid/8.0.0 (bbcallen@gmail.com)"
+    private val LIVE_HEADERS = mapOf("Referer" to "https://live.bilibili.com/")
 
     // ---------- 共用 ----------
 
@@ -24,12 +32,30 @@ object BiliApi {
         return b.build()
     }
 
-    private suspend fun get(base: String, params: Map<String, Any?> = emptyMap(), wbi: Boolean = false): JSONObject {
+    private suspend fun get(
+        base: String,
+        params: Map<String, Any?> = emptyMap(),
+        wbi: Boolean = false,
+        headers: Map<String, String> = emptyMap(),
+    ): JSONObject {
         val p = params.filterValues { it != null }.mapValues { it.value.toString() }
-        val json = Http.getJson(buildUrl(base, if (wbi) Wbi.sign(p) else p))
+        return checked(Http.getJson(buildUrl(base, if (wbi) Wbi.sign(p) else p), headers))
+    }
+
+    private fun checked(json: JSONObject): JSONObject {
         val code = json.optInt("code", 0)
         if (code != 0) throw ApiException(code, errorMessage(code, json.optString("message")))
         return json
+    }
+
+    /** Android App 介面的 appkey 簽名（UP 主投稿列表用，Web 版介面風控太嚴） */
+    private fun appSign(params: Map<String, String>): Map<String, String> {
+        val p = TreeMap(params)
+        p["appkey"] = APP_KEY
+        p["ts"] = (System.currentTimeMillis() / 1000).toString()
+        val query = p.entries.joinToString("&") { "${it.key}=${URLEncoder.encode(it.value, "UTF-8")}" }
+        p["sign"] = Wbi.md5(query + APP_SEC)
+        return p
     }
 
     private fun errorMessage(code: Int, msg: String) = when (code) {
@@ -264,12 +290,211 @@ object BiliApi {
             pages = d.optJSONArray("pages").objects().map {
                 Page(it.optLong("cid"), it.optInt("page"), it.optString("part"), it.optInt("duration"))
             },
+            ownerMid = owner?.optLong("mid") ?: 0,
+            season = d.optJSONObject("ugc_season")?.let(::season),
         )
+    }
+
+    private fun season(s: JSONObject): Season? {
+        val episodes = s.optJSONArray("sections").objects().flatMap { sec ->
+            sec.optJSONArray("episodes").objects().map { e ->
+                val arc = e.optJSONObject("arc")
+                Episode(
+                    bvid = e.optString("bvid"),
+                    aid = e.optLong("aid"),
+                    cid = e.optLong("cid"),
+                    title = e.optString("title"),
+                    cover = arc?.optString("pic").orEmpty(),
+                    duration = arc?.optInt("duration") ?: e.optJSONObject("page")?.optInt("duration") ?: 0,
+                    views = arc?.optJSONObject("stat")?.optLong("view") ?: 0,
+                )
+            }
+        }.filter { it.bvid.isNotEmpty() }
+        if (episodes.size < 2) return null
+        return Season(s.optLong("id"), s.optString("title"), episodes)
     }
 
     suspend fun related(bvid: String): List<VideoItem> =
         get("$API/x/web-interface/archive/related", mapOf("bvid" to bvid))
             .optJSONArray("data").objects().map(::archive).filter { it.bvid.isNotEmpty() }
+
+    // ---------- UP 主 ----------
+
+    suspend fun upInfo(mid: Long): UpInfo {
+        val d = get("$API/x/web-interface/card", mapOf("mid" to mid, "photo" to false)).getJSONObject("data")
+        val c = d.getJSONObject("card")
+        val live = runCatching { liveRoomOf(mid) }.getOrNull()
+        return UpInfo(
+            mid = mid,
+            name = c.optString("name"),
+            face = c.optString("face"),
+            sign = c.optString("sign"),
+            fans = c.optLong("fans"),
+            following = c.optLong("attention"),
+            level = c.optJSONObject("level_info")?.optInt("current_level") ?: 0,
+            vip = c.optJSONObject("vip")?.optInt("status") == 1,
+            archiveCount = d.optInt("archive_count"),
+            isFollowing = d.optBoolean("following"),
+            liveRoomId = live?.optLong("roomid") ?: 0,
+            isLive = live?.optInt("liveStatus") == 1,
+            liveTitle = live?.optString("title").orEmpty(),
+        )
+    }
+
+    private suspend fun liveRoomOf(mid: Long): JSONObject? =
+        get("$LIVE/room/v1/Room/getRoomInfoOld", mapOf("mid" to mid), headers = LIVE_HEADERS).optJSONObject("data")
+
+    data class UpVideosPage(val items: List<VideoItem>, val hasNext: Boolean)
+
+    /** UP 主投稿，依發布時間；以上一頁最後一部的 aid 當游標 */
+    suspend fun upVideos(mid: Long, lastAid: Long): UpVideosPage {
+        val p = mutableMapOf(
+            "vmid" to "$mid", "order" to "pubdate", "ps" to "30",
+            "build" to "8000000", "mobi_app" to "android", "platform" to "android",
+        )
+        if (lastAid > 0) p["aid"] = "$lastAid"
+        val json = checked(
+            Http.getJson(buildUrl("https://app.bilibili.com/x/v2/space/archive/cursor", appSign(p)), mapOf("User-Agent" to APP_UA))
+        )
+        val d = json.getJSONObject("data")
+        val items = d.optJSONArray("item").objects().filter { it.optString("bvid").isNotEmpty() }.map { o ->
+            VideoItem(
+                bvid = o.optString("bvid"),
+                aid = o.optString("param").toLongOrNull() ?: 0,
+                cid = o.optLong("first_cid"),
+                title = o.optString("title"),
+                cover = o.optString("cover"),
+                author = "",
+                duration = Fmt.duration(o.optInt("duration")),
+                views = Fmt.count(o.optLong("play")),
+                danmaku = Fmt.count(o.optLong("danmaku")),
+                extra = o.optString("publish_time_text").ifEmpty { Fmt.relative(o.optLong("ctime")) },
+            )
+        }
+        return UpVideosPage(items, d.optBoolean("has_next") && items.isNotEmpty())
+    }
+
+    suspend fun setFollow(mid: Long, follow: Boolean) {
+        val csrf = Http.cookies.get("bili_jct") ?: throw ApiException(-101, "帳號未登入")
+        checked(
+            Http.postForm(
+                "$API/x/relation/modify",
+                mapOf("fid" to mid, "act" to if (follow) 1 else 2, "re_src" to 11, "csrf" to csrf),
+            )
+        )
+    }
+
+    // ---------- 直播 ----------
+
+    private fun liveItem(o: JSONObject, cover: String, online: String, area: String) = VideoItem(
+        bvid = "",
+        liveRoomId = o.optLong("roomid"),
+        title = o.optString("title"),
+        cover = cover,
+        author = o.optString("uname"),
+        views = online,
+        extra = area,
+    )
+
+    suspend fun liveRecommend(page: Int): List<VideoItem> {
+        val d = get(
+            "$LIVE/xlive/web-interface/v1/second/getUserRecommend",
+            mapOf("page" to page, "page_size" to 30, "platform" to "web", "web_location" to "333.1007"),
+            wbi = true,
+            headers = LIVE_HEADERS,
+        ).getJSONObject("data")
+        return d.optJSONArray("list").objects().map { o ->
+            liveItem(
+                o,
+                cover = o.optString("user_cover").ifEmpty { o.optString("cover") }.ifEmpty { o.optString("system_cover") },
+                online = Fmt.count(o.optLong("online")),
+                area = o.optString("area_v2_name").ifEmpty { o.optString("area_name") },
+            )
+        }
+    }
+
+    data class LiveFollowingPage(val items: List<VideoItem>, val hasMore: Boolean)
+
+    /** 關注的主播，清單是開播中的排在前面 */
+    suspend fun liveFollowing(page: Int): LiveFollowingPage {
+        val d = get(
+            "$LIVE/xlive/web-ucenter/user/following",
+            mapOf("page" to page, "page_size" to 10, "ignoreRecord" to 1, "hit_ab" to true),
+            headers = LIVE_HEADERS,
+        ).getJSONObject("data")
+        val all = d.optJSONArray("list").objects()
+        val live = all.filter { it.optInt("live_status") == 1 }
+        val items = live.map { o ->
+            liveItem(o, cover = o.optString("room_cover"), online = o.optString("text_small"), area = o.optString("area_name_v2"))
+        }
+        val hasMore = all.isNotEmpty() && live.size == all.size && page < d.optInt("totalPage", 1)
+        return LiveFollowingPage(items, hasMore)
+    }
+
+    data class LiveRoom(val title: String, val uid: Long, val online: Long, val area: String, val liveStatus: Int)
+
+    suspend fun liveRoom(roomId: Long): LiveRoom {
+        val d = get("$LIVE/room/v1/Room/get_info", mapOf("room_id" to roomId), headers = LIVE_HEADERS).getJSONObject("data")
+        return LiveRoom(d.optString("title"), d.optLong("uid"), d.optLong("online"), d.optString("area_name"), d.optInt("live_status"))
+    }
+
+    suspend fun liveAnchorName(roomId: Long): String =
+        get("$LIVE/live_user/v1/UserInfo/get_anchor_in_room", mapOf("roomid" to roomId), headers = LIVE_HEADERS)
+            .optJSONObject("data")?.optJSONObject("info")?.optString("uname").orEmpty()
+
+    /**
+     * 只選 AVC（電視盒子相容性最好）。格式優先 HLS-fmp4 → HLS-ts → FLV：
+     * 有些房間的 HLS-ts 是轉碼流，playlist 會回 404。
+     */
+    suspend fun livePlay(roomId: Long, qn: Int): LivePlay {
+        val d = get(
+            "$LIVE/xlive/web-room/v2/index/getRoomPlayInfo",
+            mapOf(
+                "room_id" to roomId, "protocol" to "0,1", "format" to "0,1,2", "codec" to "0",
+                "qn" to qn, "platform" to "web", "ptype" to 8,
+            ),
+            headers = LIVE_HEADERS,
+        ).getJSONObject("data")
+        val status = d.optInt("live_status")
+        val realId = d.optLong("room_id").takeIf { it > 0 } ?: roomId
+        val pu = d.optJSONObject("playurl_info")?.optJSONObject("playurl")
+            ?: return LivePlay(realId, status, emptyList(), 0, emptyList())
+        val names = pu.optJSONArray("g_qn_desc").objects().associate { it.optInt("qn") to it.optString("desc") }
+
+        class Candidate(val protocol: String, val format: String, val codec: JSONObject)
+        val candidates = mutableListOf<Candidate>()
+        for (s in pu.optJSONArray("stream").objects()) {
+            for (f in s.optJSONArray("format").objects()) {
+                for (c in f.optJSONArray("codec").objects()) {
+                    if (c.optString("codec_name") == "avc") {
+                        candidates += Candidate(s.optString("protocol_name"), f.optString("format_name"), c)
+                    }
+                }
+            }
+        }
+        fun rank(c: Candidate) = when {
+            c.protocol == "http_hls" && c.format == "fmp4" -> 0
+            c.protocol == "http_hls" -> 1
+            else -> 2
+        }
+        val ordered = candidates.sortedBy(::rank)
+        val first = ordered.firstOrNull() ?: throw IOException("沒有可用的直播串流")
+        val sources = ordered.flatMap { cand ->
+            val base = cand.codec.optString("base_url")
+            cand.codec.optJSONArray("url_info").objects().map {
+                LiveSource(it.optString("host") + base + it.optString("extra"), cand.protocol == "http_hls")
+            }
+        }
+        val acceptArr = first.codec.optJSONArray("accept_qn")
+        val accept = if (acceptArr == null) emptyList() else (0 until acceptArr.length()).map { acceptArr.optInt(it) }
+        return LivePlay(
+            roomId = realId,
+            liveStatus = status,
+            qualities = accept.map { it to (names[it] ?: "$it") },
+            quality = first.codec.optInt("current_qn"),
+            sources = sources,
+        )
+    }
 
     // ---------- 播放 ----------
 

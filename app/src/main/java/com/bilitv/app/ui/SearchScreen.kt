@@ -36,7 +36,8 @@ import androidx.tv.material3.Text
 import com.bilitv.app.net.BiliApi
 
 @Composable
-fun SearchScreen(openVideo: (String) -> Unit) {
+fun SearchScreen() {
+    val nav = LocalNav.current
     var text by rememberSaveable { mutableStateOf("") }
     var query by rememberSaveable { mutableStateOf("") }
     val vm: FeedViewModel = viewModel(key = "search") { FeedViewModel { SearchSource("") } }
@@ -113,7 +114,7 @@ fun SearchScreen(openVideo: (String) -> Unit) {
                 }
             }
         } else {
-            VideoGrid(vm, onClick = { openVideo(it.bvid) })
+            VideoGrid(vm, onClick = nav::open)
         }
     }
 }

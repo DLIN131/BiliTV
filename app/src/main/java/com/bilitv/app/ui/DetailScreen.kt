@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -54,8 +56,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
 @Composable
-fun DetailScreen(bvid: String, openVideo: (String) -> Unit) {
+fun DetailScreen(bvid: String) {
     val context = LocalContext.current
+    val nav = LocalNav.current
     var detail by remember { mutableStateOf<VideoDetail?>(null) }
     var related by remember { mutableStateOf<List<VideoItem>>(emptyList()) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -115,18 +118,21 @@ fun DetailScreen(bvid: String, openVideo: (String) -> Unit) {
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(Modifier.height(14.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.height(10.dp))
+                // 點 UP 主進個人頁
+                BiliButton(onClick = { nav.openUp(d.ownerMid) }) {
                     AsyncImage(
                         model = Fmt.image(d.ownerFace, 96, 96),
                         contentDescription = null,
                         modifier = Modifier
-                            .size(34.dp)
+                            .size(30.dp)
                             .clip(CircleShape)
                             .background(CardBg),
                     )
                     Spacer(Modifier.width(10.dp))
-                    Text(d.ownerName, fontSize = 17.sp, color = Pink)
+                    Text(d.ownerName, fontSize = 16.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("UP 主頁 ›", fontSize = 13.sp)
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
@@ -171,6 +177,40 @@ fun DetailScreen(bvid: String, openVideo: (String) -> Unit) {
             }
         }
 
+        d.season?.let { season ->
+            val current = season.episodes.indexOfFirst { it.bvid == d.bvid }
+            Spacer(Modifier.height(24.dp))
+            Text(
+                "合集・${season.title}（${if (current >= 0) "${current + 1} / " else ""}${season.episodes.size}）",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            val listState = rememberLazyListState(initialFirstVisibleItemIndex = (current - 1).coerceAtLeast(0))
+            LazyRow(
+                state = listState,
+                contentPadding = PaddingValues(vertical = 16.dp, horizontal = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+            ) {
+                itemsIndexed(season.episodes, key = { _, ep -> ep.bvid }) { i, ep ->
+                    VideoCard(
+                        item = VideoItem(
+                            bvid = ep.bvid,
+                            aid = ep.aid,
+                            cid = ep.cid,
+                            title = ep.title,
+                            cover = ep.cover,
+                            author = if (i == current) "▶ 目前這集" else "第 ${i + 1} 集",
+                            duration = Fmt.duration(ep.duration),
+                            views = if (ep.views > 0) Fmt.count(ep.views) else "",
+                        ),
+                        // 合集直接播放，播放器裡也能切換集數、自動播下一集
+                        onClick = { PlayerActivity.start(context, ep.bvid) },
+                        modifier = Modifier.width(270.dp),
+                    )
+                }
+            }
+        }
+
         if (related.isNotEmpty()) {
             Spacer(Modifier.height(24.dp))
             Text("相關推薦", fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -179,7 +219,7 @@ fun DetailScreen(bvid: String, openVideo: (String) -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 items(related, key = { it.bvid }) { item ->
-                    VideoCard(item, onClick = { openVideo(item.bvid) }, modifier = Modifier.width(270.dp))
+                    VideoCard(item, onClick = { nav.open(item) }, modifier = Modifier.width(270.dp))
                 }
             }
         }
