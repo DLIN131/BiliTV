@@ -25,7 +25,21 @@
 
 在列表頁按返回會先回到左側選單，在選單上再按一次返回才會離開 App。
 
-## 建置與安裝
+## 下載安裝（電視上）
+最新版 APK 的固定網址（每次推送到 `main` 都會由 GitHub Actions 自動打包並發布）：
+
+```
+https://github.com/DLIN131/BiliTV/releases/latest/download/BiliTV.apk
+```
+
+用電視上的 **Downloader**（AFTVnews 出的 App）安裝：
+1. 在 Google Play / Amazon 商店安裝 Downloader。
+2. 在「設定 → 隱私權與安全性 → 安裝不明應用程式」允許 Downloader 安裝 App。
+3. 打開 Downloader，在網址欄輸入上面的網址，下載完成後按「安裝」。
+
+之後有新版本時，用同樣的網址下載就能直接覆蓋更新（簽章固定）。
+
+## 自己建置
 ```bash
 ./gradlew assembleDebug
 ```
