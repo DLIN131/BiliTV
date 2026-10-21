@@ -47,6 +47,8 @@ class PlayerActivity : ComponentActivity() {
         private const val EXTRA_BVID = "bvid"
         private const val EXTRA_CID = "cid"
         private const val AVC = 7
+        private const val BOOST_SPEED = 2f
+        private const val MAX_URL_ATTEMPTS = 3
 
         fun start(context: Context, bvid: String, cid: Long = 0L) {
             context.startActivity(
@@ -66,12 +68,16 @@ class PlayerActivity : ComponentActivity() {
     private var currentCid = 0L
     private var currentCodec = AVC
     private var avcFallback = false
+    /** 第幾條線路（主網址 + 備用網址），CDN 回 4xx/5xx 時換下一條 */
+    private var urlAttempt = 0
 
     private var loadJob: Job? = null
     private var danmakuJob: Job? = null
     private var hintJob: Job? = null
     private var lastInteraction = 0L
     private var lastBack = 0L
+    private var okDown = false
+    private var boosting = false
 
     private val dataSourceFactory by lazy {
         DefaultHttpDataSource.Factory()
@@ -95,6 +101,13 @@ class PlayerActivity : ComponentActivity() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            // 2xxx 是網路／IO 錯誤（例如 CDN 節點回 503），先換備用線路
+            if (error.errorCode / 1000 == 2 && urlAttempt < MAX_URL_ATTEMPTS) {
+                urlAttempt++
+                showHint("連線失敗，改用備用線路（$urlAttempt）")
+                rebuild(player.currentPosition)
+                return
+            }
             if (currentCodec != AVC && !avcFallback) {
                 // 電視盒子不一定支援 HEVC / AV1 硬解，自動退回 AVC
                 avcFallback = true
@@ -147,6 +160,8 @@ class PlayerActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        if (boosting) stopBoost()
+        okDown = false
         reportProgress()
         player.pause()
     }
@@ -205,6 +220,7 @@ class PlayerActivity : ComponentActivity() {
         danmakuView.setData(emptyList())
         player.stop()
         avcFallback = false
+        urlAttempt = 0
         ui.pageIndex = index
         ui.subtitle = if (d.pages.size > 1) "P${page.page}  ${page.title}" else d.ownerName
         ui.loading = true
@@ -264,8 +280,11 @@ class PlayerActivity : ComponentActivity() {
     }
 
     /** 盡量避開 PCDN（mcdn）節點，它們在海外或部分網路常常很慢。 */
-    private fun pickUrl(urls: List<String>): String =
-        urls.firstOrNull { !it.contains("mcdn.bilivideo") && !it.contains(".szbdyd.com") } ?: urls.first()
+    private fun pickUrl(urls: List<String>): String {
+        val (pcdn, normal) = urls.partition { it.contains("mcdn.bilivideo") || it.contains(".szbdyd.com") }
+        val ordered = normal + pcdn
+        return ordered[urlAttempt % ordered.size]
+    }
 
     private fun rebuild(positionMs: Long) {
         val i = info ?: return
@@ -282,7 +301,10 @@ class PlayerActivity : ComponentActivity() {
     private fun retry() {
         if (detail == null) load()
         else if (info == null || currentCid != detail?.pages?.getOrNull(ui.pageIndex)?.cid) playPage(ui.pageIndex, 0L)
-        else rebuild(player.currentPosition)
+        else {
+            urlAttempt++
+            rebuild(player.currentPosition)
+        }
     }
 
     private fun onEnded() {
@@ -381,6 +403,20 @@ class PlayerActivity : ComponentActivity() {
         showControls()
     }
 
+    private fun startBoost() {
+        boosting = true
+        ui.boosting = true
+        ui.seekTarget = null
+        if (!player.isPlaying) player.play()
+        player.setPlaybackSpeed(BOOST_SPEED)
+    }
+
+    private fun stopBoost() {
+        boosting = false
+        ui.boosting = false
+        player.setPlaybackSpeed(ui.speed)
+    }
+
     private fun togglePlay() {
         if (ui.error != null) {
             retry()
@@ -432,7 +468,18 @@ class PlayerActivity : ComponentActivity() {
                 return true
             }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER,
-            KeyEvent.KEYCODE_SPACE, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+            KeyEvent.KEYCODE_SPACE -> {
+                // 短按：暫停／播放（放開時才判斷）；長按：放開前以 2 倍速播放
+                if (down) {
+                    if (event.repeatCount == 0) okDown = true
+                    else if (okDown && !boosting && ui.error == null) startBoost()
+                } else {
+                    if (boosting) stopBoost() else if (okDown) togglePlay()
+                    okDown = false
+                }
+                return true
+            }
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                 if (first) togglePlay()
                 return true
             }

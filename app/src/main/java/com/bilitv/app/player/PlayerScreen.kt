@@ -82,6 +82,8 @@ class PlayerUi {
     var danmakuOn by mutableStateOf(true)
     var pages by mutableStateOf<List<Page>>(emptyList())
     var pageIndex by mutableIntStateOf(0)
+    /** 長按 OK 暫時 2 倍速 */
+    var boosting by mutableStateOf(false)
 }
 
 val SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
@@ -158,6 +160,19 @@ fun PlayerScreen(
             Controls(ui)
         }
 
+        if (ui.boosting) {
+            Text(
+                "▶▶  2 倍速播放中",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 36.dp)
+                    .background(Color(0xCC000000), RoundedCornerShape(20.dp))
+                    .padding(horizontal = 22.dp, vertical = 10.dp),
+            )
+        }
+
         ui.hint?.let {
             Text(
                 it,
@@ -228,7 +243,7 @@ private fun Controls(ui: PlayerUi) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("${Fmt.ms(pos)} / ${Fmt.ms(dur)}", fontSize = 17.sp)
                 Spacer(Modifier.weight(1f))
-                Text("←→ 快退/快進    OK 暫停    ↑ 選單    ↓ 資訊    返回×2 離開", fontSize = 14.sp, color = Gray)
+                Text("←→ 快退/快進    OK 暫停（長按 2 倍速）    ↑ 選單    ↓ 資訊    返回×2 離開", fontSize = 14.sp, color = Gray)
                 Spacer(Modifier.width(20.dp))
                 val q = ui.qualities.firstOrNull { it.first == ui.quality }?.second.orEmpty()
                 Text(listOf(q, if (ui.speed != 1f) "${ui.speed}x" else "").filter { it.isNotEmpty() }.joinToString(" · "), fontSize = 14.sp, color = Pink)
