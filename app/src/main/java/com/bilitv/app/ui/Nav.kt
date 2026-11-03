@@ -23,7 +23,7 @@ class Nav(
     }
 }
 
-val LocalNav = staticCompositionLocalOf<Nav> { error("Nav 尚未提供") }
+val LocalNav = staticCompositionLocalOf<Nav> { error("Nav is not provided") }
 
 /** 從外部連結打開 App：影片、UP 主頁、直播間 */
 sealed interface DeepLink {

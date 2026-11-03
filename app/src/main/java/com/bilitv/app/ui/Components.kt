@@ -33,6 +33,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -44,6 +45,7 @@ import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import com.bilitv.app.R
 import com.bilitv.app.net.VideoItem
 import com.bilitv.app.util.Fmt
 import kotlinx.coroutines.delay
@@ -105,21 +107,21 @@ fun VideoCard(item: VideoItem, onClick: () -> Unit, modifier: Modifier = Modifie
             ) {
                 if (item.views.isNotEmpty()) {
                     Text(
-                        if (item.liveRoomId > 0) "人氣 ${item.views}" else "▶ ${item.views}",
+                        if (item.liveRoomId > 0) stringResource(R.string.live_popularity, item.views) else "▶ ${item.views}",
                         fontSize = 11.sp,
                         color = Color.White,
                     )
                     Spacer(Modifier.width(10.dp))
                 }
                 if (item.danmaku.isNotEmpty()) {
-                    Text("彈 ${item.danmaku}", fontSize = 11.sp, color = Color.White)
+                    Text(stringResource(R.string.danmaku_count, item.danmaku), fontSize = 11.sp, color = Color.White)
                 }
                 Spacer(Modifier.weight(1f))
                 if (item.duration.isNotEmpty()) Text(item.duration, fontSize = 11.sp, color = Color.White)
             }
             if (item.liveRoomId > 0) {
                 Text(
-                    "● 直播",
+                    stringResource(R.string.live_badge),
                     fontSize = 11.sp,
                     color = Color.White,
                     modifier = Modifier
@@ -179,7 +181,7 @@ fun ErrorBox(message: String, onRetry: () -> Unit, modifier: Modifier = Modifier
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(message, color = Gray, fontSize = 16.sp)
         Spacer(Modifier.height(12.dp))
-        BiliButton(onClick = onRetry) { Text("重試") }
+        BiliButton(onClick = onRetry) { Text(stringResource(R.string.retry)) }
     }
 }
 
@@ -190,9 +192,9 @@ fun LoginPrompt(onLogin: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("登入後才能查看這裡的內容", fontSize = 20.sp, color = Gray)
+        Text(stringResource(R.string.login_required), fontSize = 20.sp, color = Gray)
         Spacer(Modifier.height(16.dp))
-        BiliButton(onClick = onLogin) { Text("前往登入") }
+        BiliButton(onClick = onLogin) { Text(stringResource(R.string.go_login)) }
     }
 }
 
@@ -220,7 +222,7 @@ fun VideoGrid(vm: FeedViewModel, onClick: (VideoItem) -> Unit, modifier: Modifie
             when {
                 vm.loading -> Loading()
                 err != null -> ErrorBox(err, onRetry = { vm.loadMore() })
-                else -> Text("這裡什麼都沒有", color = Gray, fontSize = 18.sp)
+                else -> Text(stringResource(R.string.empty_list), color = Gray, fontSize = 18.sp)
             }
         }
         return

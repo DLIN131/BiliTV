@@ -1,5 +1,6 @@
 package com.bilitv.app.ui
 
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -29,16 +30,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.os.LocaleListCompat
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.bilitv.app.Prefs
+import com.bilitv.app.R
 import com.bilitv.app.Session
 import com.bilitv.app.net.BiliApi
 import com.bilitv.app.util.Fmt
 import com.bilitv.app.util.QrCode
+import com.bilitv.app.util.Strings
 import com.bilitv.app.util.Updater
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -52,8 +57,10 @@ fun MineScreen() {
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
     ) {
-        ScreenTitle("我的")
+        ScreenTitle(stringResource(R.string.nav_mine))
         Column(Modifier.padding(horizontal = 28.dp, vertical = 16.dp)) {
+            LanguagePanel()
+            Spacer(Modifier.height(32.dp))
             if (user?.isLogin == true) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     AsyncImage(
@@ -69,33 +76,55 @@ fun MineScreen() {
                         Text(user.name, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            "UID ${user.mid}  ·  LV${user.level}" + if (user.vip) "  ·  大會員" else "",
+                            "UID ${user.mid}  ·  LV${user.level}" + if (user.vip) stringResource(R.string.vip_suffix) else "",
                             fontSize = 15.sp,
                             color = if (user.vip) Pink else Gray,
                         )
                     }
                     Spacer(Modifier.width(40.dp))
-                    BiliButton(onClick = { Session.logout() }) { Text("登出") }
+                    BiliButton(onClick = { Session.logout() }) { Text(stringResource(R.string.logout)) }
                 }
             } else {
                 LoginPanel()
             }
 
             Spacer(Modifier.height(40.dp))
-            Text("播放設定", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.playback_settings), fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(16.dp))
             SettingsPanel()
             Spacer(Modifier.height(24.dp))
             Text(
-                "提示：未登入時只能播放較低畫質；1080P 高碼率、4K 等需要大會員。若影片無法播放，請把編碼改回 AVC。",
+                stringResource(R.string.playback_tip),
                 fontSize = 14.sp,
                 color = Gray,
             )
 
             Spacer(Modifier.height(40.dp))
-            Text("關於", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.about), fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(16.dp))
             UpdatePanel()
+        }
+    }
+}
+
+@Composable
+private fun LanguagePanel() {
+    // AppCompat recreates activities and persists the selection, including on API 23–32.
+    val selected = AppCompatDelegate.getApplicationLocales()
+    val options = listOf(
+        "" to R.string.language_system,
+        "zh-Hans" to R.string.language_simplified,
+        "zh-Hant" to R.string.language_traditional,
+    )
+    Text(stringResource(R.string.language_title), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    Spacer(Modifier.height(16.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        options.forEach { (tag, label) ->
+            val locales = LocaleListCompat.forLanguageTags(tag)
+            BiliButton(
+                onClick = { AppCompatDelegate.setApplicationLocales(locales) },
+                selected = selected == locales,
+            ) { Text(stringResource(label)) }
         }
     }
 }
@@ -111,18 +140,18 @@ private fun SettingsPanel() {
             val ids = Prefs.QUALITIES.map { it.first }
             quality = ids[(ids.indexOf(quality) + 1) % ids.size]
             Prefs.quality = quality
-        }) { Text("預設畫質：${Prefs.qualityName(quality)}") }
+        }) { Text(stringResource(R.string.default_quality, Prefs.qualityName(quality))) }
 
         BiliButton(onClick = {
             val ids = Prefs.CODECS.map { it.first }
             codec = ids[(ids.indexOf(codec) + 1) % ids.size]
             Prefs.codec = codec
-        }) { Text("影片編碼：${Prefs.codecName(codec)}") }
+        }) { Text(stringResource(R.string.video_codec, Prefs.codecName(codec))) }
 
         BiliButton(onClick = {
             danmaku = !danmaku
             Prefs.danmaku = danmaku
-        }) { Text("預設顯示彈幕：${if (danmaku) "開" else "關"}") }
+        }) { Text(stringResource(R.string.default_danmaku, if (danmaku) stringResource(R.string.on) else stringResource(R.string.off))) }
     }
 }
 
@@ -133,7 +162,7 @@ private fun UpdatePanel() {
     var result by remember { mutableStateOf<String?>(null) }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("目前版本 ${Updater.currentVersionName}", fontSize = 16.sp)
+        Text(stringResource(R.string.current_version, Updater.currentVersionName), fontSize = 16.sp)
         Spacer(Modifier.width(24.dp))
         BiliButton(onClick = {
             if (checking) return@BiliButton
@@ -141,11 +170,11 @@ private fun UpdatePanel() {
             result = null
             scope.launch {
                 runCatching { Updater.check() }
-                    .onSuccess { if (it != null) Updater.pending = it else result = "已經是最新版本" }
-                    .onFailure { result = "檢查失敗：${it.message}" }
+                    .onSuccess { if (it != null) Updater.pending = it else result = Strings.get(R.string.up_to_date) }
+                    .onFailure { result = Strings.get(R.string.update_check_failed, it.message) }
                 checking = false
             }
-        }) { Text(if (checking) "檢查中…" else "檢查更新") }
+        }) { Text(if (checking) stringResource(R.string.update_checking) else stringResource(R.string.check_updates)) }
         result?.let {
             Spacer(Modifier.width(16.dp))
             Text(it, fontSize = 15.sp, color = Gray)
@@ -156,27 +185,27 @@ private fun UpdatePanel() {
 @Composable
 private fun LoginPanel() {
     var qr by remember { mutableStateOf<ImageBitmap?>(null) }
-    var status by remember { mutableStateOf("正在取得登入二維碼…") }
+    var status by remember { mutableStateOf(Strings.get(R.string.login_loading)) }
     var round by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(round) {
         qr = null
-        status = "正在取得登入二維碼…"
+        status = Strings.get(R.string.login_loading)
         try {
             val (url, key) = BiliApi.qrGenerate()
             qr = QrCode.bitmap(url, 480)
-            status = "請用手機上的嗶哩嗶哩 App 掃描二維碼"
+            status = Strings.get(R.string.login_scan_prompt)
             while (true) {
                 delay(2000)
                 when (BiliApi.qrPoll(key)) {
                     0 -> {
-                        status = "登入成功！"
+                        status = Strings.get(R.string.login_success)
                         Session.onLoggedIn()
                         return@LaunchedEffect
                     }
-                    86090 -> status = "已掃描，請在手機上確認登入"
+                    86090 -> status = Strings.get(R.string.login_confirm_prompt)
                     86038 -> {
-                        status = "二維碼已過期，請重新整理"
+                        status = Strings.get(R.string.login_expired)
                         qr = null
                         return@LaunchedEffect
                     }
@@ -185,7 +214,7 @@ private fun LoginPanel() {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            status = "錯誤：${e.message}"
+            status = Strings.get(R.string.error_detail, e.message)
         }
     }
 
@@ -199,20 +228,20 @@ private fun LoginPanel() {
         ) {
             val bmp = qr
             if (bmp != null) {
-                Image(bmp, contentDescription = "登入二維碼", modifier = Modifier.size(240.dp))
+                Image(bmp, contentDescription = stringResource(R.string.login_qr_description), modifier = Modifier.size(240.dp))
             } else {
                 Loading(size = 40)
             }
         }
         Spacer(Modifier.width(36.dp))
         Column {
-            Text("掃碼登入", fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.login_title), fontSize = 26.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(10.dp))
             Text(status, fontSize = 17.sp, color = Gray)
             Spacer(Modifier.height(8.dp))
-            Text("登入後可以看關注動態、歷史紀錄，並同步播放進度與更高畫質。", fontSize = 14.sp, color = Gray)
+            Text(stringResource(R.string.login_benefits), fontSize = 14.sp, color = Gray)
             Spacer(Modifier.height(20.dp))
-            BiliButton(onClick = { round++ }) { Text("重新整理二維碼") }
+            BiliButton(onClick = { round++ }) { Text(stringResource(R.string.login_refresh)) }
         }
     }
 }

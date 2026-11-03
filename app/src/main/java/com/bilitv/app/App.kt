@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import com.bilitv.app.net.BiliApi
 import com.bilitv.app.net.Http
 import com.bilitv.app.net.UserInfo
+import com.bilitv.app.util.Strings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,6 +19,7 @@ import kotlinx.coroutines.launch
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
+        Strings.init(this)
         Prefs.init(this)
         Http.init(this)
         scope.launch {
@@ -58,11 +60,11 @@ object Session {
 }
 
 object Prefs {
-    val QUALITIES = listOf(
-        127 to "8K 超高清", 120 to "4K 超清", 116 to "1080P 60幀", 112 to "1080P 高碼率",
-        80 to "1080P 高清", 64 to "720P 高清", 32 to "480P 清晰", 16 to "360P 流暢",
+    val QUALITIES get() = listOf(
+        127 to Strings.get(R.string.quality_8k), 120 to Strings.get(R.string.quality_4k), 116 to Strings.get(R.string.quality_1080p60), 112 to Strings.get(R.string.quality_1080p_high),
+        80 to Strings.get(R.string.quality_1080p), 64 to Strings.get(R.string.quality_720p), 32 to Strings.get(R.string.quality_480p), 16 to Strings.get(R.string.quality_360p),
     )
-    val CODECS = listOf(7 to "AVC (H.264，相容性最好)", 12 to "HEVC (H.265)", 13 to "AV1")
+    val CODECS get() = listOf(7 to Strings.get(R.string.codec_avc), 12 to "HEVC (H.265)", 13 to "AV1")
 
     fun qualityName(qn: Int) = QUALITIES.firstOrNull { it.first == qn }?.second ?: "$qn"
     fun codecName(id: Int) = CODECS.firstOrNull { it.first == id }?.second ?: "$id"

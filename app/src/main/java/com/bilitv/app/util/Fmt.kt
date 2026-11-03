@@ -1,13 +1,15 @@
 package com.bilitv.app.util
 
+import com.bilitv.app.R
+import com.bilitv.app.util.Strings
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 object Fmt {
     fun count(n: Long): String = when {
-        n >= 100_000_000 -> "%.1f億".format(n / 1e8)
-        n >= 10_000 -> "%.1f萬".format(n / 1e4)
+        n >= 100_000_000 -> Strings.get(R.string.count_hundred_million, n / 1e8)
+        n >= 10_000 -> Strings.get(R.string.count_ten_thousand, n / 1e4)
         else -> n.toString()
     }
 
@@ -28,11 +30,11 @@ object Fmt {
         if (sec <= 0) return ""
         val diff = System.currentTimeMillis() / 1000 - sec
         return when {
-            diff < 60 -> "剛剛"
-            diff < 3600 -> "${diff / 60} 分鐘前"
-            diff < 86400 -> "${diff / 3600} 小時前"
-            diff < 2 * 86400 -> "昨天"
-            diff < 7 * 86400 -> "${diff / 86400} 天前"
+            diff < 60 -> Strings.get(R.string.time_just_now)
+            diff < 3600 -> Strings.get(R.string.time_minutes_ago, diff / 60)
+            diff < 86400 -> Strings.get(R.string.time_hours_ago, diff / 3600)
+            diff < 2 * 86400 -> Strings.get(R.string.time_yesterday)
+            diff < 7 * 86400 -> Strings.get(R.string.time_days_ago, diff / 86400)
             else -> date(sec)
         }
     }

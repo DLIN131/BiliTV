@@ -26,21 +26,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.os.ConfigurationCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.Text
+import com.bilitv.app.R
 import com.bilitv.app.net.BiliApi
+import kotlinx.coroutines.delay
 
 @Composable
 fun SearchScreen() {
     val nav = LocalNav.current
     var text by rememberSaveable { mutableStateOf("") }
     var query by rememberSaveable { mutableStateOf("") }
-    val vm: FeedViewModel = viewModel(key = "search") { FeedViewModel { SearchSource("") } }
+    val language = ConfigurationCompat.getLocales(LocalConfiguration.current).toLanguageTags()
+    val vm: FeedViewModel = viewModel(key = "search#$language") { FeedViewModel { SearchSource("") } }
     val hot = remember { mutableStateListOf<String>() }
     val searchButton = remember { FocusRequester() }
     var focusTick by remember { mutableIntStateOf(0) }
@@ -71,7 +76,7 @@ fun SearchScreen() {
     }
 
     Column(Modifier.fillMaxSize()) {
-        ScreenTitle("搜尋")
+        ScreenTitle(stringResource(R.string.nav_search))
         Row(
             Modifier.padding(horizontal = 28.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -80,7 +85,7 @@ fun SearchScreen() {
                 value = text,
                 onValueChange = { text = it },
                 singleLine = true,
-                placeholder = { Text("輸入影片關鍵字", color = Gray) },
+                placeholder = { Text(stringResource(R.string.search_hint), color = Gray) },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { search(text) }),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -93,16 +98,16 @@ fun SearchScreen() {
                 modifier = Modifier.width(520.dp),
             )
             Spacer(Modifier.width(16.dp))
-            BiliButton(onClick = { search(text) }, modifier = Modifier.focusRequester(searchButton)) { Text("搜尋") }
+            BiliButton(onClick = { search(text) }, modifier = Modifier.focusRequester(searchButton)) { Text(stringResource(R.string.nav_search)) }
             if (query.isNotEmpty()) {
                 Spacer(Modifier.width(12.dp))
-                BiliButton(onClick = { query = ""; text = "" }) { Text("清除") }
+                BiliButton(onClick = { query = ""; text = "" }) { Text(stringResource(R.string.clear)) }
             }
         }
 
         if (query.isEmpty()) {
             Column(Modifier.padding(horizontal = 28.dp, vertical = 16.dp)) {
-                Text("熱門搜尋", fontSize = 18.sp, color = Gray)
+                Text(stringResource(R.string.search_hot), fontSize = 18.sp, color = Gray)
                 Spacer(Modifier.height(14.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
