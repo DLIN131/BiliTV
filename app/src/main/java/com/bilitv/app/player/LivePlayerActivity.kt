@@ -7,10 +7,10 @@ import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.ViewGroup
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import androidx.annotation.OptIn
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -48,6 +48,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -70,6 +71,7 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
+import com.bilitv.app.R
 import com.bilitv.app.net.BiliApi
 import com.bilitv.app.net.Http
 import com.bilitv.app.net.LivePlay
@@ -78,6 +80,7 @@ import com.bilitv.app.ui.BiliTheme
 import com.bilitv.app.ui.Gray
 import com.bilitv.app.ui.Pink
 import com.bilitv.app.util.Fmt
+import com.bilitv.app.util.Strings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -101,7 +104,7 @@ class LiveUi {
 }
 
 @OptIn(UnstableApi::class)
-class LivePlayerActivity : ComponentActivity() {
+class LivePlayerActivity : AppCompatActivity() {
 
     companion object {
         private const val EXTRA_ROOM = "room"
@@ -153,11 +156,11 @@ class LivePlayerActivity : ComponentActivity() {
 
         override fun onPlaybackStateChanged(state: Int) {
             ui.buffering = state == Player.STATE_BUFFERING
-            if (state == Player.STATE_ENDED) ui.error = "直播已結束或中斷\n按 OK 鍵重新連線"
+            if (state == Player.STATE_ENDED) ui.error = Strings.get(R.string.live_ended_retry)
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            failover("連線失敗（${error.errorCodeName}）")
+            failover(Strings.get(R.string.connection_failed, error.errorCodeName))
         }
     }
 
@@ -167,7 +170,7 @@ class LivePlayerActivity : ComponentActivity() {
         val p = play
         if (p != null && urlAttempt < p.sources.size - 1) {
             urlAttempt++
-            showHint("$reason，改用備用線路（$urlAttempt）")
+            showHint(Strings.get(R.string.live_backup, reason, urlAttempt))
             startStream()
             return
         }
@@ -177,7 +180,7 @@ class LivePlayerActivity : ComponentActivity() {
             return
         }
         player.stop()
-        ui.error = "直播播放失敗：$reason\n按 OK 鍵重試"
+        ui.error = Strings.get(R.string.live_error_retry, reason)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -239,7 +242,7 @@ class LivePlayerActivity : ComponentActivity() {
             try {
                 val p = BiliApi.livePlay(roomId, qn)
                 if (p.sources.isEmpty()) {
-                    ui.error = "主播目前沒有在直播"
+                    ui.error = Strings.get(R.string.live_offline)
                     return@launch
                 }
                 roomId = p.roomId
@@ -251,7 +254,7 @@ class LivePlayerActivity : ComponentActivity() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                ui.error = "載入直播失敗：${e.message}\n按 OK 鍵重試"
+                ui.error = Strings.get(R.string.live_load_retry, e.message)
             } finally {
                 ui.loading = false
             }
@@ -279,7 +282,7 @@ class LivePlayerActivity : ComponentActivity() {
             runCatching { BiliApi.liveRoom(roomId) }.onSuccess { r ->
                 if (r.title.isNotEmpty()) ui.title = r.title
                 ui.area = r.area
-                ui.online = if (r.online > 0) "人氣 ${Fmt.count(r.online)}" else ""
+                ui.online = if (r.online > 0) Strings.get(R.string.live_popularity_value, Fmt.count(r.online)) else ""
             }
             if (ui.anchor.isEmpty()) {
                 runCatching { BiliApi.liveAnchorName(roomId) }.onSuccess { ui.anchor = it }
@@ -293,7 +296,7 @@ class LivePlayerActivity : ComponentActivity() {
         if (qn == ui.quality) return
         refetched = false
         load(qn)
-        showHint("切換至 ${ui.qualities.firstOrNull { it.first == qn }?.second ?: qn}")
+        showHint(Strings.get(R.string.live_quality_changed, ui.qualities.firstOrNull { it.first == qn }?.second ?: qn))
     }
 
     private fun startTicker() {
@@ -311,7 +314,7 @@ class LivePlayerActivity : ComponentActivity() {
                 } else if (stallSince == 0L) {
                     stallSince = SystemClock.uptimeMillis()
                 } else if (SystemClock.uptimeMillis() - stallSince > STALL_TIMEOUT_MS) {
-                    failover("連線逾時")
+                    failover(Strings.get(R.string.connection_timeout))
                 }
                 if (ui.controlsVisible && player.isPlaying && !ui.menuOpen &&
                     SystemClock.uptimeMillis() - lastInteraction > 5_000
@@ -362,7 +365,7 @@ class LivePlayerActivity : ComponentActivity() {
             finish()
         } else {
             lastBack = now
-            showHint("再按一次返回鍵離開直播")
+            showHint(Strings.get(R.string.exit_live_hint))
         }
     }
 
@@ -455,7 +458,7 @@ private fun LivePlayerScreen(ui: LiveUi, player: Player, onQuality: (Int) -> Uni
                     .background(Color(0x99000000), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = "暫停中", modifier = Modifier.size(60.dp))
+                Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.paused), modifier = Modifier.size(60.dp))
             }
         }
 
@@ -475,7 +478,7 @@ private fun LivePlayerScreen(ui: LiveUi, player: Player, onQuality: (Int) -> Uni
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "● 直播",
+                            stringResource(R.string.live_badge),
                             fontSize = 14.sp,
                             modifier = Modifier
                                 .background(Pink, RoundedCornerShape(4.dp))
@@ -499,7 +502,7 @@ private fun LivePlayerScreen(ui: LiveUi, player: Player, onQuality: (Int) -> Uni
                         .padding(start = 48.dp, end = 48.dp, top = 48.dp, bottom = 32.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("OK 暫停    ↑ 畫質    ↓ 資訊    返回×2 離開", fontSize = 14.sp, color = Gray)
+                    Text(stringResource(R.string.live_controls_hint), fontSize = 14.sp, color = Gray)
                     Spacer(Modifier.weight(1f))
                     Text(ui.qualities.firstOrNull { it.first == ui.quality }?.second.orEmpty(), fontSize = 14.sp, color = Pink)
                 }
@@ -537,7 +540,7 @@ private fun LivePlayerScreen(ui: LiveUi, player: Player, onQuality: (Int) -> Uni
                         .background(Color(0xF0141418))
                         .padding(horizontal = 28.dp, vertical = 24.dp)
                 ) {
-                    Text("畫質", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.quality), fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     LazyColumn(
                         contentPadding = PaddingValues(vertical = 16.dp, horizontal = 6.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),

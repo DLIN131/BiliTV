@@ -26,6 +26,7 @@ android {
         targetSdk = 36
         versionCode = buildNumber
         versionName = "1.0.$buildNumber"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -70,6 +71,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-core:1.7.8")
     implementation("androidx.tv:tv-material:1.0.0")
     implementation("androidx.activity:activity-compose:1.10.1")
+    implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.1")
@@ -82,4 +84,9 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("com.google.zxing:core:3.5.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
 }

@@ -23,17 +23,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.os.ConfigurationCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import com.bilitv.app.R
 import com.bilitv.app.Session
 import com.bilitv.app.net.BiliApi
 import com.bilitv.app.net.UpInfo
 import com.bilitv.app.util.Fmt
+import com.bilitv.app.util.Strings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -47,7 +52,8 @@ fun UpScreen(mid: Long) {
     var attempt by remember { mutableIntStateOf(0) }
     var followBusy by remember { mutableStateOf(false) }
     var followMsg by remember { mutableStateOf<String?>(null) }
-    val vm: FeedViewModel = viewModel(key = "up-$mid#${Session.generation}") {
+    val language = ConfigurationCompat.getLocales(LocalConfiguration.current).toLanguageTags()
+    val vm: FeedViewModel = viewModel(key = "up-$mid#${Session.generation}#$language") {
         FeedViewModel { UpVideosSource(mid) }.apply {
             // 第一次載入完把焦點放在第一部影片
             focusIndex = 0
@@ -62,7 +68,7 @@ fun UpScreen(mid: Long) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            error = e.message ?: "載入失敗"
+            error = e.message ?: Strings.get(R.string.error_load)
         }
     }
 
@@ -98,12 +104,12 @@ fun UpScreen(mid: Long) {
                         Text("LV${up.level}", fontSize = 14.sp, color = Pink)
                         if (up.vip) {
                             Spacer(Modifier.width(8.dp))
-                            Text("大會員", fontSize = 14.sp, color = Pink)
+                            Text(stringResource(R.string.vip), fontSize = 14.sp, color = Pink)
                         }
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "${Fmt.count(up.fans)} 粉絲  ·  ${Fmt.count(up.following)} 關注  ·  ${up.archiveCount} 部影片",
+                        stringResource(R.string.up_stats, Fmt.count(up.fans), Fmt.count(up.following), up.archiveCount),
                         fontSize = 15.sp,
                         color = Gray,
                     )
@@ -117,7 +123,7 @@ fun UpScreen(mid: Long) {
                     BiliButton(
                         onClick = { nav.openLive(up.liveRoomId, up.liveTitle, up.name) },
                         selected = true,
-                    ) { Text("● 直播中") }
+                    ) { Text(stringResource(R.string.live_now)) }
                     Spacer(Modifier.width(12.dp))
                 }
                 if (Session.isLogin) {
@@ -139,7 +145,7 @@ fun UpScreen(mid: Long) {
                             }
                         },
                         selected = !up.isFollowing,
-                    ) { Text(if (up.isFollowing) "已關注" else "+ 關注") }
+                    ) { Text(if (up.isFollowing) stringResource(R.string.following) else stringResource(R.string.follow)) }
                 }
             }
             followMsg?.let {
@@ -147,7 +153,7 @@ fun UpScreen(mid: Long) {
             }
         }
         Text(
-            "投稿影片",
+            stringResource(R.string.up_videos),
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(start = 40.dp, top = 12.dp),

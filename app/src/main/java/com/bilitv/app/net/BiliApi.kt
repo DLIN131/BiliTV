@@ -2,18 +2,20 @@ package com.bilitv.app.net
 
 import androidx.core.text.HtmlCompat
 import com.bilitv.app.Prefs
+import com.bilitv.app.R
 import com.bilitv.app.Session
 import com.bilitv.app.util.Fmt
+import com.bilitv.app.util.Strings
+import java.io.IOException
+import java.net.URLEncoder
+import java.util.TreeMap
+import java.util.zip.Inflater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.IOException
-import java.net.URLEncoder
-import java.util.TreeMap
-import java.util.zip.Inflater
 
 object BiliApi {
     private const val API = "https://api.bilibili.com"
@@ -59,12 +61,12 @@ object BiliApi {
     }
 
     private fun errorMessage(code: Int, msg: String) = when (code) {
-        -101 -> "帳號未登入"
-        -352, -412 -> "請求被 B 站風控攔截，請稍後再試 ($code)"
-        -404 -> "影片不存在或已刪除"
-        62002 -> "影片不可見"
-        62004 -> "影片審核中"
-        else -> "${msg.ifEmpty { "未知錯誤" }} ($code)"
+        -101 -> Strings.get(R.string.error_not_logged_in)
+        -352, -412 -> Strings.get(R.string.error_risk_control, code)
+        -404 -> Strings.get(R.string.error_video_deleted)
+        62002 -> Strings.get(R.string.error_video_hidden)
+        62004 -> Strings.get(R.string.error_video_review)
+        else -> Strings.get(R.string.error_api, msg.ifEmpty { Strings.get(R.string.error_unknown) }, code)
     }
 
     private fun JSONArray?.objects(): List<JSONObject> =
@@ -375,7 +377,7 @@ object BiliApi {
     }
 
     suspend fun setFollow(mid: Long, follow: Boolean) {
-        val csrf = Http.cookies.get("bili_jct") ?: throw ApiException(-101, "帳號未登入")
+        val csrf = Http.cookies.get("bili_jct") ?: throw ApiException(-101, Strings.get(R.string.error_not_logged_in))
         checked(
             Http.postForm(
                 "$API/x/relation/modify",
@@ -478,7 +480,7 @@ object BiliApi {
             else -> 2
         }
         val ordered = candidates.sortedBy(::rank)
-        val first = ordered.firstOrNull() ?: throw IOException("沒有可用的直播串流")
+        val first = ordered.firstOrNull() ?: throw IOException(Strings.get(R.string.error_no_live_stream))
         val sources = ordered.flatMap { cand ->
             val base = cand.codec.optString("base_url")
             cand.codec.optJSONArray("url_info").objects().map {

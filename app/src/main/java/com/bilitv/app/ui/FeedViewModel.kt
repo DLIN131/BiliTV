@@ -7,8 +7,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.bilitv.app.R
 import com.bilitv.app.net.BiliApi
 import com.bilitv.app.net.VideoItem
+import com.bilitv.app.util.Strings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -148,7 +150,7 @@ class FeedViewModel(private var factory: () -> FeedSource) : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (gen == generation) error = e.message ?: "載入失敗"
+                if (gen == generation) error = e.message ?: Strings.get(R.string.error_load)
             } finally {
                 if (gen == generation) loading = false
             }

@@ -1,12 +1,14 @@
 package com.bilitv.app.net
 
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import okhttp3.HttpUrl.Companion.toHttpUrl
+import com.bilitv.app.R
+import com.bilitv.app.util.Strings
 import java.io.IOException
 import java.net.URLEncoder
 import java.security.MessageDigest
 import java.util.TreeMap
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import okhttp3.HttpUrl.Companion.toHttpUrl
 
 /** B 站 Web 介面的 WBI 簽名。 */
 object Wbi {
@@ -42,7 +44,7 @@ object Wbi {
                 update(img.getString("img_url"), img.getString("sub_url"))
             }
         }
-        return mixinKey ?: throw IOException("無法取得 WBI 金鑰")
+        return mixinKey ?: throw IOException(Strings.get(R.string.error_wbi_key))
     }
 
     suspend fun sign(params: Map<String, String>): Map<String, String> {

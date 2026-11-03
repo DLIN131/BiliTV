@@ -43,6 +43,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,6 +56,7 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
+import com.bilitv.app.R
 import com.bilitv.app.net.Episode
 import com.bilitv.app.net.Page
 import com.bilitv.app.ui.BiliButton
@@ -93,7 +95,8 @@ class PlayerUi {
 
 val SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
 
-private fun speedLabel(s: Float) = if (s == 1f) "正常" else "${s}x"
+@Composable
+private fun speedLabel(s: Float) = if (s == 1f) stringResource(R.string.speed_normal) else "${s}x"
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -153,7 +156,7 @@ fun PlayerScreen(
                     .background(Color(0x99000000), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = "暫停中", modifier = Modifier.size(60.dp))
+                Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.paused), modifier = Modifier.size(60.dp))
             }
         }
 
@@ -168,7 +171,7 @@ fun PlayerScreen(
 
         if (ui.boosting) {
             Text(
-                "▶▶  2 倍速播放中",
+                stringResource(R.string.speed_boost),
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier
@@ -249,7 +252,7 @@ private fun Controls(ui: PlayerUi) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("${Fmt.ms(pos)} / ${Fmt.ms(dur)}", fontSize = 17.sp)
                 Spacer(Modifier.weight(1f))
-                Text("←→ 快退/快進    OK 暫停（長按 2 倍速）    ↑ 選單    ↓ 資訊    返回×2 離開", fontSize = 14.sp, color = Gray)
+                Text(stringResource(R.string.playback_controls_hint), fontSize = 14.sp, color = Gray)
                 Spacer(Modifier.width(20.dp))
                 val q = ui.qualities.firstOrNull { it.first == ui.quality }?.second.orEmpty()
                 Text(listOf(q, if (ui.speed != 1f) "${ui.speed}x" else "").filter { it.isNotEmpty() }.joinToString(" · "), fontSize = 14.sp, color = Pink)
@@ -283,14 +286,14 @@ private fun PlayerMenu(
                 .background(Color(0xF0141418))
                 .padding(horizontal = 28.dp, vertical = 24.dp)
         ) {
-            Text("播放設定", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.playback_settings), fontSize = 22.sp, fontWeight = FontWeight.Bold)
             LazyColumn(
                 contentPadding = PaddingValues(vertical = 16.dp, horizontal = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 if (ui.qualities.isNotEmpty()) {
                     item {
-                        MenuSection("畫質") {
+                        MenuSection(stringResource(R.string.quality)) {
                             ui.qualities.forEach { (id, name) ->
                                 val sel = id == ui.quality
                                 BiliButton(
@@ -303,7 +306,7 @@ private fun PlayerMenu(
                     }
                 }
                 item {
-                    MenuSection("播放速度") {
+                    MenuSection(stringResource(R.string.playback_speed)) {
                         SPEEDS.forEach { s ->
                             BiliButton(onClick = { onSpeed(s) }, selected = s == ui.speed) {
                                 Text(speedLabel(s), fontSize = 15.sp)
@@ -312,20 +315,20 @@ private fun PlayerMenu(
                     }
                 }
                 item {
-                    MenuSection("彈幕") {
+                    MenuSection(stringResource(R.string.danmaku)) {
                         BiliButton(
                             onClick = { onDanmaku(true) },
                             selected = ui.danmakuOn,
                             modifier = if (!focusOnQuality) Modifier.focusRequester(first) else Modifier,
-                        ) { Text("開啟", fontSize = 15.sp) }
+                        ) { Text(stringResource(R.string.enable), fontSize = 15.sp) }
                         BiliButton(onClick = { onDanmaku(false) }, selected = !ui.danmakuOn) {
-                            Text("關閉", fontSize = 15.sp)
+                            Text(stringResource(R.string.disable), fontSize = 15.sp)
                         }
                     }
                 }
                 if (ui.pages.size > 1) {
                     item {
-                        Text("選集（${ui.pages.size}）", fontSize = 15.sp, color = Gray, modifier = Modifier.padding(top = 8.dp))
+                        Text(stringResource(R.string.episode_count_player, ui.pages.size), fontSize = 15.sp, color = Gray, modifier = Modifier.padding(top = 8.dp))
                     }
                     itemsIndexed(ui.pages, key = { _, p -> p.cid }) { i, p ->
                         BiliButton(
@@ -340,7 +343,7 @@ private fun PlayerMenu(
                 if (ui.episodes.size > 1) {
                     item {
                         Text(
-                            "合集・${ui.seasonTitle}（${ui.episodes.size}）",
+                            stringResource(R.string.collection_count, ui.seasonTitle, ui.episodes.size),
                             fontSize = 15.sp,
                             color = Gray,
                             maxLines = 1,

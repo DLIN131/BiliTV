@@ -6,10 +6,10 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import androidx.annotation.OptIn
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -26,6 +26,7 @@ import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import com.bilitv.app.App
 import com.bilitv.app.Prefs
+import com.bilitv.app.R
 import com.bilitv.app.Session
 import com.bilitv.app.net.BiliApi
 import com.bilitv.app.net.Http
@@ -33,15 +34,16 @@ import com.bilitv.app.net.PlayInfo
 import com.bilitv.app.net.VideoDetail
 import com.bilitv.app.ui.BiliTheme
 import com.bilitv.app.util.Fmt
+import com.bilitv.app.util.Strings
+import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.io.IOException
 
 @OptIn(UnstableApi::class)
-class PlayerActivity : ComponentActivity() {
+class PlayerActivity : AppCompatActivity() {
 
     companion object {
         private const val EXTRA_BVID = "bvid"
@@ -109,18 +111,18 @@ class PlayerActivity : ComponentActivity() {
             // 2xxx 是網路／IO 錯誤（例如 CDN 節點回 503），先換備用線路
             if (error.errorCode / 1000 == 2 && urlAttempt < MAX_URL_ATTEMPTS) {
                 urlAttempt++
-                showHint("連線失敗，改用備用線路（$urlAttempt）")
+                showHint(Strings.get(R.string.playback_backup, urlAttempt))
                 rebuild(player.currentPosition)
                 return
             }
             if (currentCodec != AVC && !avcFallback) {
                 // 電視盒子不一定支援 HEVC / AV1 硬解，自動退回 AVC
                 avcFallback = true
-                showHint("目前編碼無法播放，已改用 AVC")
+                showHint(Strings.get(R.string.playback_codec_fallback))
                 rebuild(player.currentPosition)
                 return
             }
-            ui.error = "播放失敗：${error.errorCodeName}\n按 OK 鍵重試"
+            ui.error = Strings.get(R.string.playback_error_retry, error.errorCodeName)
         }
     }
 
@@ -201,7 +203,7 @@ class PlayerActivity : ComponentActivity() {
         loadJob = lifecycleScope.launch {
             try {
                 val d = BiliApi.view(bvid)
-                if (d.pages.isEmpty()) throw IOException("這部影片沒有可播放的內容")
+                if (d.pages.isEmpty()) throw IOException(Strings.get(R.string.error_no_content))
                 detail = d
                 ui.title = d.title
                 ui.pages = d.pages
@@ -223,12 +225,12 @@ class PlayerActivity : ComponentActivity() {
                         if (page.cid == lastCid && ms > 5_000 && ms < page.duration * 1000L - 10_000) start = ms
                     }
                 }
-                playPage(index, start, if (start > 0) "已從 ${Fmt.ms(start)} 繼續播放" else hint)
+                playPage(index, start, if (start > 0) Strings.get(R.string.playback_resumed, Fmt.ms(start)) else hint)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 ui.loading = false
-                ui.error = "載入失敗：${e.message}\n按 OK 鍵重試"
+                ui.error = Strings.get(R.string.playback_load_retry, e.message)
             }
         }
     }
@@ -247,7 +249,7 @@ class PlayerActivity : ComponentActivity() {
         ui.pageIndex = index
         ui.subtitle = listOfNotNull(
             d.ownerName,
-            if (ui.episodeIndex >= 0) "合集 ${ui.seasonTitle} 第 ${ui.episodeIndex + 1}/${ui.episodes.size} 集" else null,
+            if (ui.episodeIndex >= 0) Strings.get(R.string.playback_collection, ui.seasonTitle, ui.episodeIndex + 1, ui.episodes.size) else null,
             if (d.pages.size > 1) "P${page.page} ${page.title}" else null,
         ).filter { it.isNotBlank() }.joinToString("  ·  ")
         ui.loading = true
@@ -272,7 +274,7 @@ class PlayerActivity : ComponentActivity() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                ui.error = "取得播放地址失敗：${e.message}\n按 OK 鍵重試"
+                ui.error = Strings.get(R.string.playback_url_retry, e.message)
             } finally {
                 ui.loading = false
             }
@@ -287,7 +289,7 @@ class PlayerActivity : ComponentActivity() {
     private fun buildSource(info: PlayInfo, qn: Int): MediaSource {
         val factory = ProgressiveMediaSource.Factory(dataSourceFactory)
         if (info.videos.isEmpty()) {
-            val url = info.durl.firstOrNull() ?: throw IOException("沒有可用的播放地址")
+            val url = info.durl.firstOrNull() ?: throw IOException(Strings.get(R.string.error_no_play_url))
             currentCodec = AVC
             return factory.createMediaSource(MediaItem.fromUri(url))
         }
@@ -321,7 +323,7 @@ class PlayerActivity : ComponentActivity() {
             player.prepare()
             player.playWhenReady = true
         } catch (e: Exception) {
-            ui.error = "播放失敗：${e.message}"
+            ui.error = Strings.get(R.string.playback_error, e.message)
         }
     }
 
@@ -345,11 +347,11 @@ class PlayerActivity : ComponentActivity() {
     private fun next(auto: Boolean = false): Boolean {
         val d = detail ?: return false
         if (ui.pageIndex < d.pages.size - 1) {
-            playPage(ui.pageIndex + 1, 0L, if (auto) "自動播放下一 P" else null)
+            playPage(ui.pageIndex + 1, 0L, if (auto) Strings.get(R.string.autoplay_next_part) else null)
             return true
         }
         val ep = ui.episodes.getOrNull(ui.episodeIndex + 1).takeIf { ui.episodeIndex >= 0 } ?: return false
-        loadVideo(ep.bvid, hint = "${if (auto) "自動播放下一集" else "下一集"}：${ep.title}")
+        loadVideo(ep.bvid, hint = Strings.get(R.string.next_episode_hint, if (auto) Strings.get(R.string.autoplay_next_episode) else Strings.get(R.string.next_episode), ep.title))
         return true
     }
 
@@ -359,7 +361,7 @@ class PlayerActivity : ComponentActivity() {
             return
         }
         val ep = ui.episodes.getOrNull(ui.episodeIndex - 1) ?: return
-        loadVideo(ep.bvid, hint = "上一集：${ep.title}")
+        loadVideo(ep.bvid, hint = Strings.get(R.string.previous_episode_hint, ep.title))
     }
 
     private fun reportProgress() {
@@ -378,7 +380,7 @@ class PlayerActivity : ComponentActivity() {
         Prefs.quality = qn
         ui.quality = qn
         rebuild(player.currentPosition)
-        showHint("已切換至 ${ui.qualities.firstOrNull { it.first == qn }?.second ?: qn}")
+        showHint(Strings.get(R.string.quality_changed, ui.qualities.firstOrNull { it.first == qn }?.second ?: qn))
     }
 
     private fun setSpeed(speed: Float) {
@@ -487,7 +489,7 @@ class PlayerActivity : ComponentActivity() {
             finish()
         } else {
             lastBack = now
-            showHint("再按一次返回鍵離開播放")
+            showHint(Strings.get(R.string.exit_playback_hint))
         }
     }
 
@@ -571,7 +573,7 @@ class PlayerActivity : ComponentActivity() {
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_NEXT, KeyEvent.KEYCODE_CHANNEL_DOWN -> {
-                if (first && !next()) showHint("已經是最後一集")
+                if (first && !next()) showHint(Strings.get(R.string.last_episode))
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_PREVIOUS, KeyEvent.KEYCODE_CHANNEL_UP -> {

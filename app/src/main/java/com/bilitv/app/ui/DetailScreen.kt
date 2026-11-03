@@ -40,6 +40,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,11 +48,13 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import com.bilitv.app.R
 import com.bilitv.app.net.BiliApi
 import com.bilitv.app.net.VideoDetail
 import com.bilitv.app.net.VideoItem
 import com.bilitv.app.player.PlayerActivity
 import com.bilitv.app.util.Fmt
+import com.bilitv.app.util.Strings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
@@ -72,7 +75,7 @@ fun DetailScreen(bvid: String) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            error = e.message ?: "載入失敗"
+            error = e.message ?: Strings.get(R.string.error_load)
             return@LaunchedEffect
         }
         delay(60)
@@ -132,12 +135,12 @@ fun DetailScreen(bvid: String) {
                     Spacer(Modifier.width(10.dp))
                     Text(d.ownerName, fontSize = 16.sp)
                     Spacer(Modifier.width(8.dp))
-                    Text("UP 主頁 ›", fontSize = 13.sp)
+                    Text(stringResource(R.string.up_home), fontSize = 13.sp)
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "${Fmt.count(d.views)} 播放  ·  ${Fmt.count(d.danmaku)} 彈幕  ·  ${Fmt.count(d.likes)} 讚  ·  " +
-                        "${Fmt.count(d.coins)} 投幣  ·  ${Fmt.count(d.favorites)} 收藏  ·  ${Fmt.date(d.pubdate)}",
+                    stringResource(R.string.video_stats_primary, Fmt.count(d.views), Fmt.count(d.danmaku), Fmt.count(d.likes)) +
+                        stringResource(R.string.video_stats_secondary, Fmt.count(d.coins), Fmt.count(d.favorites), Fmt.date(d.pubdate)),
                     fontSize = 14.sp,
                     color = Gray,
                 )
@@ -152,14 +155,14 @@ fun DetailScreen(bvid: String) {
                 ) {
                     Icon(Icons.Filled.PlayArrow, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
-                    Text("播放", fontSize = 18.sp)
+                    Text(stringResource(R.string.play), fontSize = 18.sp)
                 }
             }
         }
 
         if (d.pages.size > 1) {
             Spacer(Modifier.height(28.dp))
-            Text("選集（${d.pages.size}）", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.episode_count, d.pages.size), fontSize = 20.sp, fontWeight = FontWeight.Bold)
             LazyRow(
                 contentPadding = PaddingValues(vertical = 14.dp, horizontal = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -181,7 +184,7 @@ fun DetailScreen(bvid: String) {
             val current = season.episodes.indexOfFirst { it.bvid == d.bvid }
             Spacer(Modifier.height(24.dp))
             Text(
-                "合集・${season.title}（${if (current >= 0) "${current + 1} / " else ""}${season.episodes.size}）",
+                stringResource(R.string.collection_progress, season.title, if (current >= 0) "${current + 1} / " else "", season.episodes.size),
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -199,7 +202,7 @@ fun DetailScreen(bvid: String) {
                             cid = ep.cid,
                             title = ep.title,
                             cover = ep.cover,
-                            author = if (i == current) "▶ 目前這集" else "第 ${i + 1} 集",
+                            author = if (i == current) stringResource(R.string.current_episode) else stringResource(R.string.episode_number, i + 1),
                             duration = Fmt.duration(ep.duration),
                             views = if (ep.views > 0) Fmt.count(ep.views) else "",
                         ),
@@ -213,7 +216,7 @@ fun DetailScreen(bvid: String) {
 
         if (related.isNotEmpty()) {
             Spacer(Modifier.height(24.dp))
-            Text("相關推薦", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.related_videos), fontSize = 20.sp, fontWeight = FontWeight.Bold)
             LazyRow(
                 contentPadding = PaddingValues(vertical = 16.dp, horizontal = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(20.dp),

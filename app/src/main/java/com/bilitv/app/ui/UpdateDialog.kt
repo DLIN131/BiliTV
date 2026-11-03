@@ -22,6 +22,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -29,12 +30,14 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Text
+import com.bilitv.app.R
+import com.bilitv.app.util.Strings
 import com.bilitv.app.util.Updater
+import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.io.File
 
 @Composable
 fun UpdateDialog(release: Updater.Release, onDismiss: () -> Unit) {
@@ -51,9 +54,9 @@ fun UpdateDialog(release: Updater.Release, onDismiss: () -> Unit) {
             message = null
             Updater.install(context, apk)
         } else {
-            message = "請在接下來的設定畫面允許 BiliTV「安裝不明應用程式」，返回後再按「安裝」。"
+            message = Strings.get(R.string.install_permission_prompt)
             if (!Updater.openInstallPermissionSettings(context)) {
-                message = "找不到設定頁面，請到「設定 → 安全性與限制 → 不明來源」允許 BiliTV，再回來按「安裝」。"
+                message = Strings.get(R.string.install_permission_fallback)
             }
         }
     }
@@ -76,7 +79,7 @@ fun UpdateDialog(release: Updater.Release, onDismiss: () -> Unit) {
                 throw e
             } catch (e: Exception) {
                 progress = null
-                message = "下載失敗：${e.message}"
+                message = Strings.get(R.string.download_failed, e.message)
             }
         }
     }
@@ -98,12 +101,12 @@ fun UpdateDialog(release: Updater.Release, onDismiss: () -> Unit) {
                 .background(CardBg, RoundedCornerShape(16.dp))
                 .padding(32.dp)
         ) {
-            Text("發現新版本", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.update_available), fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(6.dp))
             Text("${Updater.currentVersionName}  →  ${release.name.removePrefix("BiliTV ")}", fontSize = 16.sp, color = Pink)
             if (release.notes.isNotBlank()) {
                 Spacer(Modifier.height(16.dp))
-                Text("更新內容", fontSize = 15.sp, color = Gray)
+                Text(stringResource(R.string.update_notes), fontSize = 15.sp, color = Gray)
                 Spacer(Modifier.height(6.dp))
                 Text(release.notes, fontSize = 15.sp, lineHeight = 22.sp, maxLines = 8, overflow = TextOverflow.Ellipsis)
             }
@@ -116,7 +119,7 @@ fun UpdateDialog(release: Updater.Release, onDismiss: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(6.dp))
-                Text("下載中 ${(p * 100).toInt()}%", fontSize = 14.sp, color = Gray)
+                Text(stringResource(R.string.download_progress, (p * 100).toInt()), fontSize = 14.sp, color = Gray)
             }
             message?.let {
                 Spacer(Modifier.height(16.dp))
@@ -127,14 +130,14 @@ fun UpdateDialog(release: Updater.Release, onDismiss: () -> Unit) {
                 BiliButton(onClick = ::start, modifier = Modifier.focusRequester(primary)) {
                     Text(
                         when {
-                            progress != null -> "下載中…"
-                            file != null -> "安裝"
-                            else -> "立即更新"
+                            progress != null -> stringResource(R.string.downloading)
+                            file != null -> stringResource(R.string.install)
+                            else -> stringResource(R.string.update_now)
                         }
                     )
                 }
                 Spacer(Modifier.width(16.dp))
-                BiliButton(onClick = ::dismiss) { Text("稍後再說") }
+                BiliButton(onClick = ::dismiss) { Text(stringResource(R.string.update_later)) }
             }
         }
     }
