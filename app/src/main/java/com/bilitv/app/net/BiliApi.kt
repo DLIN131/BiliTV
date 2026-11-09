@@ -515,7 +515,7 @@ object BiliApi {
         val dash = d.optJSONObject("dash")
         val videos = dash?.optJSONArray("video").objects().map(::stream).filter { it.urls.isNotEmpty() }
         val audios = dash?.optJSONArray("audio").objects().map(::stream).filter { it.urls.isNotEmpty() }
-        val durl = d.optJSONArray("durl").objects().map { it.optString("url") }.filter { it.isNotEmpty() }
+        val durl = durlCandidates(d)
 
         val names = mutableMapOf<Int, String>()
         val acceptQ = d.optJSONArray("accept_quality")
@@ -526,6 +526,32 @@ object BiliApi {
         val ids = if (videos.isNotEmpty()) videos.map { it.id }.distinct() else listOf(d.optInt("quality"))
         val qualities = ids.sortedDescending().map { it to (names[it]?.ifEmpty { null } ?: Prefs.qualityName(it)) }
         return PlayInfo(videos, audios, durl, qualities)
+    }
+
+    /** 單檔 MP4（durl）的主網址 + 備用網址，當成同一個檔的不同線路 */
+    private fun durlCandidates(d: JSONObject): List<String> {
+        val first = d.optJSONArray("durl").objects().firstOrNull() ?: return emptyList()
+        return (listOf(first.optString("url")) +
+            (first.optJSONArray("backup_url") ?: first.optJSONArray("backupUrl")).strings()).filter { it.isNotEmpty() }
+    }
+
+    /**
+     * 相容模式：html5 平台的單檔 MP4（影音合一，最高約 720P～1080P）。
+     * DASH 的所有線路都失敗時才用，這種網址不檢查 Referer。
+     */
+    suspend fun playUrlCompat(bvid: String, cid: Long): PlayInfo {
+        val d = get(
+            "$API/x/player/wbi/playurl",
+            mapOf(
+                "bvid" to bvid, "cid" to cid, "qn" to 80, "fnval" to 1, "fnver" to 0,
+                "platform" to "html5", "high_quality" to 1,
+            ),
+            wbi = true,
+        ).getJSONObject("data")
+        val urls = durlCandidates(d)
+        if (urls.isEmpty()) throw IOException("沒有相容模式的播放地址")
+        val qn = d.optInt("quality")
+        return PlayInfo(emptyList(), emptyList(), urls, listOf(qn to "${Prefs.qualityName(qn)}（相容模式）"))
     }
 
     /** 上次播放的 cid 與位置（毫秒）。 */

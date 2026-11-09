@@ -19,7 +19,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.MergingMediaSource
@@ -73,6 +72,9 @@ class PlayerActivity : ComponentActivity() {
     private var avcFallback = false
     /** 第幾條線路（主網址 + 備用網址），CDN 回 4xx/5xx 時換下一條 */
     private var urlAttempt = 0
+    /** DASH 全失敗後改用 html5 單檔 MP4 */
+    private var compatMode = false
+    private var lastErrorReason = ""
 
     private var loadJob: Job? = null
     private var danmakuJob: Job? = null
@@ -84,14 +86,7 @@ class PlayerActivity : ComponentActivity() {
     private var lastOkUp = 0L
     private var boostRelease: Job? = null
 
-    private val dataSourceFactory by lazy {
-        DefaultHttpDataSource.Factory()
-            .setUserAgent(Http.UA)
-            .setDefaultRequestProperties(mapOf("Referer" to Http.REFERER))
-            .setConnectTimeoutMs(10_000)
-            .setReadTimeoutMs(20_000)
-            .setAllowCrossProtocolRedirects(true)
-    }
+    private val dataSourceFactory by lazy { MediaNet.dataSourceFactory(Http.REFERER) }
 
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -106,12 +101,21 @@ class PlayerActivity : ComponentActivity() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            // 2xxx 是網路／IO 錯誤（例如 CDN 節點回 503），先換備用線路
-            if (error.errorCode / 1000 == 2 && urlAttempt < MAX_URL_ATTEMPTS) {
-                urlAttempt++
-                showHint("連線失敗，改用備用線路（$urlAttempt）")
-                rebuild(player.currentPosition)
-                return
+            val reason = MediaNet.describe(error)
+            lastErrorReason = reason
+            if (MediaNet.isNetworkError(error)) {
+                // 1) 換同一串流的備用線路（例如 CDN 節點回 403/503）
+                if (urlAttempt < lineCount() - 1 && urlAttempt < MAX_URL_ATTEMPTS) {
+                    urlAttempt++
+                    showHint("連線失敗，改用備用線路（$urlAttempt）")
+                    rebuild(player.currentPosition)
+                    return
+                }
+                // 2) 全部線路都失敗：改用相容模式（單檔 MP4，網址規則不同）
+                if (!compatMode) {
+                    switchToCompat(player.currentPosition)
+                    return
+                }
             }
             if (currentCodec != AVC && !avcFallback) {
                 // 電視盒子不一定支援 HEVC / AV1 硬解，自動退回 AVC
@@ -120,7 +124,7 @@ class PlayerActivity : ComponentActivity() {
                 rebuild(player.currentPosition)
                 return
             }
-            ui.error = "播放失敗：${error.errorCodeName}\n按 OK 鍵重試"
+            ui.error = "播放失敗：$reason\n按 OK 鍵重試"
         }
     }
 
@@ -244,6 +248,7 @@ class PlayerActivity : ComponentActivity() {
         player.stop()
         avcFallback = false
         urlAttempt = 0
+        compatMode = false
         ui.pageIndex = index
         ui.subtitle = listOfNotNull(
             d.ownerName,
@@ -287,9 +292,9 @@ class PlayerActivity : ComponentActivity() {
     private fun buildSource(info: PlayInfo, qn: Int): MediaSource {
         val factory = ProgressiveMediaSource.Factory(dataSourceFactory)
         if (info.videos.isEmpty()) {
-            val url = info.durl.firstOrNull() ?: throw IOException("沒有可用的播放地址")
+            if (info.durl.isEmpty()) throw IOException("沒有可用的播放地址")
             currentCodec = AVC
-            return factory.createMediaSource(MediaItem.fromUri(url))
+            return factory.createMediaSource(MediaItem.fromUri(pickUrl(info.durl)))
         }
         val sameQuality = info.videos.filter { it.id == qn }.ifEmpty {
             val top = info.videos.maxOf { it.id }
@@ -311,6 +316,41 @@ class PlayerActivity : ComponentActivity() {
         val (pcdn, normal) = urls.partition { it.contains("mcdn.bilivideo") || it.contains(".szbdyd.com") }
         val ordered = normal + pcdn
         return ordered[urlAttempt % ordered.size]
+    }
+
+    /** 目前這個串流有幾條線路可以輪換 */
+    private fun lineCount(): Int {
+        val i = info ?: return 1
+        if (i.videos.isEmpty()) return i.durl.size.coerceAtLeast(1)
+        val v = i.videos.filter { it.id == ui.quality }.maxOfOrNull { it.urls.size } ?: 1
+        val a = i.audios.maxOfOrNull { it.urls.size } ?: 1
+        return maxOf(v, a, 1)
+    }
+
+    /** DASH 全部線路失敗時，改抓 html5 單檔 MP4 再試一次 */
+    private fun switchToCompat(positionMs: Long) {
+        val d = detail ?: return
+        val cid = currentCid.takeIf { it != 0L } ?: return
+        compatMode = true
+        urlAttempt = 0
+        showHint("一般線路都連不上，改用相容模式播放")
+        loadJob?.cancel()
+        loadJob = lifecycleScope.launch {
+            ui.loading = true
+            try {
+                val compat = BiliApi.playUrlCompat(d.bvid, cid)
+                info = compat
+                ui.qualities = compat.qualities
+                ui.quality = compat.qualities.first().first
+                rebuild(positionMs)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                ui.error = "播放失敗：$lastErrorReason\n相容模式也無法取得：${e.message}\n按 OK 鍵重試"
+            } finally {
+                ui.loading = false
+            }
+        }
     }
 
     private fun rebuild(positionMs: Long) {

@@ -39,6 +39,17 @@ object Http {
             .build()
     }
 
+    /**
+     * 給播放器用的連線：和 API 共用 OkHttp（連線池、TLS），不帶 Cookie。
+     * 部分電視盒子的系統 HttpURLConnection 連影片 CDN 會失敗，OkHttp 比較穩。
+     */
+    val mediaClient: OkHttpClient by lazy {
+        client.newBuilder()
+            .cookieJar(okhttp3.CookieJar.NO_COOKIES)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
+
     suspend fun getJson(url: HttpUrl, headers: Map<String, String> = emptyMap()): JSONObject =
         withContext(Dispatchers.IO) {
             val req = Request.Builder().url(url).apply { headers.forEach { (k, v) -> header(k, v) } }.build()

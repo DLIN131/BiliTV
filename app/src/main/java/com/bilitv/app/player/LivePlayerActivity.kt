@@ -62,7 +62,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
@@ -136,14 +135,7 @@ class LivePlayerActivity : ComponentActivity() {
     private var lastInteraction = 0L
     private var lastBack = 0L
 
-    private val dataSourceFactory by lazy {
-        DefaultHttpDataSource.Factory()
-            .setUserAgent(Http.UA)
-            .setDefaultRequestProperties(mapOf("Referer" to "https://live.bilibili.com/"))
-            .setConnectTimeoutMs(10_000)
-            .setReadTimeoutMs(20_000)
-            .setAllowCrossProtocolRedirects(true)
-    }
+    private val dataSourceFactory by lazy { MediaNet.dataSourceFactory("https://live.bilibili.com/") }
 
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -157,7 +149,7 @@ class LivePlayerActivity : ComponentActivity() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            failover("連線失敗（${error.errorCodeName}）")
+            failover("連線失敗（${MediaNet.describe(error)}）")
         }
     }
 
